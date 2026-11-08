@@ -245,21 +245,13 @@
         }
       }, [currentIndex, activeGame, filteredVocab]);
 
-      // TẠO DÂN SÁCH ĐÁP ÁN ĐỘNG THEO TỪ HIỆN TẠI (KHÔNG CỐ ĐỊNH 4 TỪ ĐẦU TIÊN)
+      // TẠO DANH SÁCH ĐÁP ÁN ĐỘNG THEO TỪ HIỆN TẠI
       const currentDynamicOptions = useMemo(() => {
         if (!filteredVocab.length || !filteredVocab[currentIndex]) return [];
         const currentItem = filteredVocab[currentIndex];
-        
-        // Lấy danh sách từ khác
         const otherItems = filteredVocab.filter(item => item.id !== currentItem.id);
-        
-        // Trộn ngẫu nhiên các từ khác để làm nhiễu
         const shuffledOthers = [...otherItems].sort(() => Math.random() - 0.5);
-        
-        // Lấy tối đa 3 đáp án sai + 1 đáp án đúng
         const selectedOptions = [currentItem, ...shuffledOthers.slice(0, 3)];
-        
-        // Xáo trộn vị trí đáp án đúng
         return selectedOptions.sort(() => Math.random() - 0.5);
       }, [currentIndex, filteredVocab, activeGame]);
 
@@ -344,7 +336,7 @@
       const handleSelectAnswer = (item, idx) => {
         if (selectedOption !== null) return;
         const isCorrect = item.id === filteredVocab[currentIndex]?.id;
-        setSelectedOption({ idx, isCorrect });
+        setSelectedOption({ idx, isCorrect, correctId: filteredVocab[currentIndex]?.id });
 
         if (isCorrect) {
           playSoundEffect('correct');
@@ -358,7 +350,7 @@
         setTimeout(() => {
           setSelectedOption(null);
           setCurrentIndex((currentIndex + 1) % filteredVocab.length);
-        }, 700);
+        }, 900);
       };
 
       return (
@@ -581,7 +573,7 @@
                 </div>
               )}
 
-              {/* GAME 1: TRẮC NGHIỆM (ĐÃ ĐỔI ĐÁP ÁN ĐỘNG THEO TỪ HIỆN TẠI) */}
+              {/* GAME 1: TRẮC NGHIỆM (HIỂN THỊ ĐÁP ÁN CHUẨN KHI BẤM SAI) */}
               {activeGame === 'mc' && filteredVocab.length > 0 && (
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
                   <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-widest">
@@ -592,10 +584,14 @@
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {currentDynamicOptions.map((item, idx) => {
                       let btnStyle = "bg-slate-950 border-slate-800 text-slate-200 hover:border-indigo-500";
-                      if (selectedOption?.idx === idx) {
-                        btnStyle = selectedOption.isCorrect 
-                          ? "bg-emerald-600 border-emerald-400 text-slate-950 font-black scale-105" 
-                          : "bg-rose-600 border-rose-400 text-white font-black animate-shake";
+                      if (selectedOption !== null) {
+                        if (selectedOption.idx === idx) {
+                          btnStyle = selectedOption.isCorrect 
+                            ? "bg-emerald-950 border-emerald-500 text-emerald-300 font-black scale-105 shadow-lg shadow-emerald-950/50" 
+                            : "bg-rose-950 border-rose-500 text-rose-300 font-black animate-shake shadow-lg shadow-rose-950/50";
+                        } else if (!selectedOption.isCorrect && item.id === selectedOption.correctId) {
+                          btnStyle = "bg-emerald-950/60 border-emerald-500/80 text-emerald-400 font-bold border-dashed animate-pulse";
+                        }
                       }
                       return (
                         <button key={idx} onClick={() => handleSelectAnswer(item, idx)} className={`p-4 rounded-2xl border text-left font-bold transition-all ${btnStyle}`}>
@@ -638,7 +634,7 @@
                       setSpellingInput('');
                       if (isCorrect) setCurrentIndex((currentIndex + 1) % filteredVocab.length);
                     }, 800);
-                  }} className="px-8 py-3 bg-emerald-600 text-slate-950 font-black rounded-xl hover:bg-emerald-500 transition-all">Kiểm tra kết quả</button>
+                  }} className="px-8 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-500 transition-all">Kiểm tra kết quả</button>
                 </div>
               )}
 
@@ -675,11 +671,11 @@
                       setScrambleInput('');
                       if (isCorrect) setCurrentIndex((currentIndex + 1) % filteredVocab.length);
                     }, 800);
-                  }} className="px-8 py-3 bg-emerald-600 text-slate-950 font-black rounded-xl hover:bg-emerald-500 transition-all">Kiểm tra</button>
+                  }} className="px-8 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-500 transition-all">Kiểm tra</button>
                 </div>
               )}
 
-              {/* GAME 4: ĐÚNG HAY SAI */}
+              {/* GAME 4: ĐÚNG HAY SAI (TỐI ƯU GIAO DIỆN MÀU TRUNG TÍNH HIỆN ĐẠI) */}
               {activeGame === 'tf' && filteredVocab.length > 0 && (
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
                   <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-widest">
@@ -690,8 +686,11 @@
                     <h3 className="text-3xl font-black text-white">{filteredVocab[currentIndex]?.word}</h3>
                     <p className="text-xl text-amber-300 font-bold">Nghĩa là: "{tfMeaning}"</p>
                   </div>
+                  
+                  {/* NÚT ĐÚNG / SAI MÀU NỀN TRUNG TÍNH CHÍNH XÁC */}
                   <div className="flex justify-center gap-4">
                     <button onClick={() => {
+                      if (selectedOption !== null) return;
                       const isCorrect = tfIsCorrect;
                       setSelectedOption({ type: 'true', isCorrect });
                       if (isCorrect) { playSoundEffect('correct'); setScore(score + 5); setStreak(streak + 1); } 
@@ -699,14 +698,19 @@
                       setTimeout(() => {
                         setSelectedOption(null);
                         setCurrentIndex((currentIndex + 1) % filteredVocab.length);
-                      }, 700);
-                    }} className={`px-8 py-4 font-black rounded-2xl text-lg flex-1 max-w-xs transition-all ${
+                      }, 800);
+                    }} className={`px-8 py-4 font-black rounded-2xl text-lg flex-1 max-w-xs transition-all border ${
                       selectedOption?.type === 'true' 
-                        ? (selectedOption.isCorrect ? 'bg-emerald-500 text-slate-950 scale-105' : 'bg-rose-600 text-white')
-                        : 'bg-emerald-600 text-slate-950 hover:bg-emerald-500'
+                        ? (selectedOption.isCorrect 
+                            ? 'bg-emerald-950 border-emerald-500 text-emerald-300 scale-105 shadow-lg shadow-emerald-950/50' 
+                            : 'bg-rose-950 border-rose-500 text-rose-300 animate-shake shadow-lg shadow-rose-950/50')
+                        : (selectedOption !== null && selectedOption.type === 'false' && !selectedOption.isCorrect)
+                            ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-400 animate-pulse'
+                            : 'bg-slate-950 border-slate-800 text-slate-200 hover:border-indigo-500'
                     }`}>✓ ĐÚNG</button>
                     
                     <button onClick={() => {
+                      if (selectedOption !== null) return;
                       const isCorrect = !tfIsCorrect;
                       setSelectedOption({ type: 'false', isCorrect });
                       if (isCorrect) { playSoundEffect('correct'); setScore(score + 5); setStreak(streak + 1); } 
@@ -714,17 +718,21 @@
                       setTimeout(() => {
                         setSelectedOption(null);
                         setCurrentIndex((currentIndex + 1) % filteredVocab.length);
-                      }, 700);
-                    }} className={`px-8 py-4 font-black rounded-2xl text-lg flex-1 max-w-xs transition-all ${
+                      }, 800);
+                    }} className={`px-8 py-4 font-black rounded-2xl text-lg flex-1 max-w-xs transition-all border ${
                       selectedOption?.type === 'false' 
-                        ? (selectedOption.isCorrect ? 'bg-emerald-500 text-slate-950 scale-105' : 'bg-rose-600 text-white')
-                        : 'bg-rose-600 text-white hover:bg-rose-500'
+                        ? (selectedOption.isCorrect 
+                            ? 'bg-emerald-950 border-emerald-500 text-emerald-300 scale-105 shadow-lg shadow-emerald-950/50' 
+                            : 'bg-rose-950 border-rose-500 text-rose-300 animate-shake shadow-lg shadow-rose-950/50')
+                        : (selectedOption !== null && selectedOption.type === 'true' && !selectedOption.isCorrect)
+                            ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-400 animate-pulse'
+                            : 'bg-slate-950 border-slate-800 text-slate-200 hover:border-indigo-500'
                     }`}>✕ SAI</button>
                   </div>
                 </div>
               )}
 
-              {/* GAME 5: NGHE ĐOÁN TỪ (ĐÃ ĐỔI ĐÁP ÁN ĐỘNG THEO TỪ HIỆN TẠI) */}
+              {/* GAME 5: NGHE ĐOÁN TỪ */}
               {activeGame === 'audio' && filteredVocab.length > 0 && (
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
                   <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-widest">
@@ -737,10 +745,14 @@
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                     {currentDynamicOptions.map((item, idx) => {
                       let btnStyle = "bg-slate-950 border-slate-800 text-white hover:border-indigo-500";
-                      if (selectedOption?.idx === idx) {
-                        btnStyle = selectedOption.isCorrect 
-                          ? "bg-emerald-600 border-emerald-400 text-slate-950 font-black scale-105" 
-                          : "bg-rose-600 border-rose-400 text-white font-black";
+                      if (selectedOption !== null) {
+                        if (selectedOption.idx === idx) {
+                          btnStyle = selectedOption.isCorrect 
+                            ? "bg-emerald-950 border-emerald-500 text-emerald-300 font-black scale-105" 
+                            : "bg-rose-950 border-rose-500 text-rose-300 font-black animate-shake";
+                        } else if (!selectedOption.isCorrect && item.id === selectedOption.correctId) {
+                          btnStyle = "bg-emerald-950/60 border-emerald-500/80 text-emerald-400 font-bold border-dashed animate-pulse";
+                        }
                       }
                       return (
                         <button key={idx} onClick={() => handleSelectAnswer(item, idx)} className={`p-4 rounded-2xl border font-bold transition-all ${btnStyle}`}>
