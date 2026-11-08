@@ -56,6 +56,58 @@
       try { firebase.initializeApp(firebaseConfig); } catch (e) {}
     }
 
+    // HÀM TẠO ÂM THANH HIỆU ỨNG ĐÚNG / SAI BẰNG WEB AUDIO API
+    const playSoundEffect = (type) => {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+
+        if (type === 'correct') {
+          // Âm thanh đúng (Tông cao, vui tươi)
+          const osc1 = ctx.createOscillator();
+          const osc2 = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc1.type = 'sine';
+          osc2.type = 'triangle';
+
+          osc1.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+          osc1.frequency.exponentialRampToValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+          osc1.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.2); // G5
+
+          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+
+          osc1.connect(gain);
+          osc2.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc1.start();
+          osc2.start();
+          osc1.stop(ctx.currentTime + 0.3);
+          osc2.stop(ctx.currentTime + 0.3);
+        } else if (type === 'wrong') {
+          // Âm thanh sai (Tông trầm)
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(180, ctx.currentTime);
+          osc.frequency.linearRampToValueAtTime(110, ctx.currentTime + 0.25);
+
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start();
+          osc.stop(ctx.currentTime + 0.25);
+        }
+      } catch (e) {}
+    };
+
     const initialVocabList = [
       { id: '1', word: 'pursue a career', meaning: 'theo đuổi sự nghiệp', example: 'She decided to pursue a career in international relations.', status: 'new', folder: 'Career' },
       { id: '2', word: 'climb the corporate ladder', meaning: 'thăng tiến trong công việc', example: 'He worked round the clock to climb the corporate ladder.', status: 'new', folder: 'Career' },
@@ -102,7 +154,7 @@
       const [activeGame, setActiveGame] = useState('menu');
       const [score, setScore] = useState(0);
       const [streak, setStreak] = useState(0);
-      const [selectedOption, setSelectedOption] = useState(null); // Trạng thái chọn ô (Đúng/Sai)
+      const [selectedOption, setSelectedOption] = useState(null);
       const [spellingInput, setSpellingInput] = useState('');
       const [scrambleInput, setScrambleInput] = useState('');
 
@@ -118,14 +170,22 @@
         }
       }, []);
 
-      // Lật thẻ bằng phím Space
+      // LẬT THẺ ÊM MẮT VỚI PHÍM SPACE
+      const toggleFlipCard = () => {
+        setIsFadingOut(true);
+        setTimeout(() => {
+          setIsFlipped(prev => !prev);
+          setIsFadingOut(false);
+        }, 150);
+      };
+
       useEffect(() => {
         const handleKeyDown = (e) => {
           if (e.code === 'Space' && activeTab === 'flashcard') {
             const tag = e.target.tagName.toLowerCase();
             if (tag !== 'input' && tag !== 'textarea') {
               e.preventDefault();
-              setIsFlipped(prev => !prev);
+              toggleFlipCard();
             }
           }
         };
@@ -255,16 +315,18 @@
       const masteredCount = filteredVocab.filter(i => i.status === 'mastered').length;
       const percentMastered = filteredVocab.length ? Math.round((masteredCount / filteredVocab.length) * 100) : 0;
 
-      // Xử lý chọn đáp án cho Game Trắc nghiệm & Audio
+      // XỬ LÝ ĐÁP ÁN TRẮC NGHIỆM + PHÁT ÂM THANH ĐÚNG/SAI
       const handleSelectAnswer = (item, idx) => {
-        if (selectedOption !== null) return; // Khóa không cho bấm liên tục
+        if (selectedOption !== null) return;
         const isCorrect = item.id === filteredVocab[currentIndex]?.id;
         setSelectedOption({ idx, isCorrect });
 
         if (isCorrect) {
+          playSoundEffect('correct');
           setScore(prev => prev + 10);
           setStreak(prev => prev + 1);
         } else {
+          playSoundEffect('wrong');
           setStreak(0);
         }
 
@@ -328,7 +390,7 @@
             </div>
           </nav>
 
-          {/* TAB 1: FLASHCARD */}
+          {/* TAB 1: FLASHCARD (LẬT MẶT DỊU MẮT EM MẮT) */}
           {activeTab === 'flashcard' && (
             <div className="flex-1 flex flex-col items-center justify-center max-w-3xl mx-auto w-full">
               <div className="w-full flex items-center justify-between mb-4 px-2">
@@ -367,14 +429,13 @@
               ) : (
                 <div className="w-full flex flex-col items-center">
                   
-                  {/* FLASHCARD BOX KHÔNG CÒN DÒNG CHỮ 'SPACE / CHẠM ĐỂ LẬT' */}
+                  {/* FLASHCARD VỚI HIỆU ỨNG LẬT ÊM MẮT MƯỢT MÀ */}
                   <div 
-                    onClick={() => setIsFlipped(!isFlipped)}
-                    className={`w-full min-h-[460px] cursor-pointer relative select-none transition-all duration-300 ${isFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
+                    onClick={toggleFlipCard}
+                    className={`w-full min-h-[460px] cursor-pointer relative select-none transition-all duration-200 ${isFadingOut ? 'opacity-0 scale-95 blur-sm' : 'opacity-100 scale-100 blur-0'}`}
                   >
                     <div className="w-full h-full min-h-[460px] rounded-3xl p-8 md:p-12 flex flex-col items-center justify-between text-center border-2 border-indigo-500/30 bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950/40 shadow-2xl relative overflow-hidden group">
                       
-                      {/* HEADER THẺ ĐÃ BỎ DÒNG NÚT BẤM */}
                       <div className="w-full flex items-center justify-between text-slate-400 text-xs font-bold tracking-wider uppercase">
                         <span>{isFlipped ? 'MẶT SAU: NGHĨA & VÍ DỤ' : 'MẶT TRƯỚC: TỪ VỰNG'}</span>
                       </div>
@@ -399,7 +460,7 @@
                     </div>
                   </div>
 
-                  {/* CẶP MŨI TÊN TRÁI PHẢI VÀ NÚT CHUYỂN TRẠNG THÁI */}
+                  {/* NÚT MŨI TÊN TRÁI PHẢI DỄ DÀNG CHUYỂN TỪ */}
                   <div className="w-full flex items-center justify-between gap-3 mt-6">
                     <button
                       onClick={() => {
@@ -407,7 +468,7 @@
                         setCurrentIndex(prev => (prev > 0 ? prev - 1 : filteredVocab.length - 1));
                       }}
                       className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500 text-white font-bold hover:bg-indigo-950/40 transition-all text-xl"
-                      title="Từ phía trước (Mũi tên trái)"
+                      title="Từ phía trước"
                     >
                       ⬅️
                     </button>
@@ -421,7 +482,7 @@
                         setCurrentIndex(prev => (prev < filteredVocab.length - 1 ? prev + 1 : 0));
                       }}
                       className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500 text-white font-bold hover:bg-indigo-950/40 transition-all text-xl"
-                      title="Từ tiếp theo (Mũi tên phải)"
+                      title="Từ tiếp theo"
                     >
                       ➡️
                     </button>
@@ -432,7 +493,7 @@
             </div>
           )}
 
-          {/* TAB 2: MINI GAMES */}
+          {/* TAB 2: MINI GAMES VỚI ĐẦY ĐỦ ÂM THANH ĐÚNG/SAI */}
           {activeTab === 'games' && (
             <div className="flex-1 max-w-4xl mx-auto w-full space-y-6">
               <div className="flex items-center justify-between bg-slate-900 p-4 rounded-2xl border border-slate-800">
@@ -495,7 +556,7 @@
                 </div>
               )}
 
-              {/* GAME 1: TRẮC NGHIỆM (ĐỔI MÀU TRỰC TIẾP TRÊN Ô KHI CHỌN) */}
+              {/* GAME 1: TRẮC NGHIỆM (ĐỔI MÀU XANH/ĐỎ + ÂM THANH) */}
               {activeGame === 'mc' && filteredVocab.length > 0 && (
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
                   <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Game 1: Trắc Nghiệm Nghĩa</span>
@@ -505,8 +566,8 @@
                       let btnStyle = "bg-slate-950 border-slate-800 text-slate-200 hover:border-indigo-500";
                       if (selectedOption?.idx === idx) {
                         btnStyle = selectedOption.isCorrect 
-                          ? "bg-emerald-600 border-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 font-black scale-105" 
-                          : "bg-rose-600 border-rose-400 text-white shadow-lg shadow-rose-500/30 font-black animate-shake";
+                          ? "bg-emerald-600 border-emerald-400 text-slate-950 font-black scale-105" 
+                          : "bg-rose-600 border-rose-400 text-white font-black animate-shake";
                       }
                       return (
                         <button key={idx} onClick={() => handleSelectAnswer(item, idx)} className={`p-4 rounded-2xl border text-left font-bold transition-all ${btnStyle}`}>
@@ -539,7 +600,8 @@
                   <button onClick={() => {
                     const isCorrect = spellingInput.trim().toLowerCase() === filteredVocab[currentIndex]?.word.toLowerCase();
                     setSelectedOption({ isCorrect });
-                    if (isCorrect) { setScore(score + 15); setStreak(streak + 1); } else { setStreak(0); }
+                    if (isCorrect) { playSoundEffect('correct'); setScore(score + 15); setStreak(streak + 1); } 
+                    else { playSoundEffect('wrong'); setStreak(0); }
                     setTimeout(() => {
                       setSelectedOption(null);
                       setSpellingInput('');
@@ -572,7 +634,8 @@
                   <button onClick={() => {
                     const isCorrect = scrambleInput.trim().toLowerCase() === filteredVocab[currentIndex]?.word.toLowerCase();
                     setSelectedOption({ isCorrect });
-                    if (isCorrect) { setScore(score + 12); setStreak(streak + 1); } else { setStreak(0); }
+                    if (isCorrect) { playSoundEffect('correct'); setScore(score + 12); setStreak(streak + 1); } 
+                    else { playSoundEffect('wrong'); setStreak(0); }
                     setTimeout(() => {
                       setSelectedOption(null);
                       setScrambleInput('');
@@ -582,7 +645,7 @@
                 </div>
               )}
 
-              {/* GAME 4: ĐÚNG HAY SAI (ĐỔI MÀU Ô ĐÚNG/SAI LẬP TỨC) */}
+              {/* GAME 4: ĐÚNG HAY SAI */}
               {activeGame === 'tf' && filteredVocab.length > 0 && (
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
                   <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Game 4: Phản Xạ Đúng / Sai</span>
@@ -594,7 +657,8 @@
                     <button onClick={() => {
                       const isCorrect = tfIsCorrect;
                       setSelectedOption({ type: 'true', isCorrect });
-                      if (isCorrect) { setScore(score + 5); setStreak(streak + 1); } else { setStreak(0); }
+                      if (isCorrect) { playSoundEffect('correct'); setScore(score + 5); setStreak(streak + 1); } 
+                      else { playSoundEffect('wrong'); setStreak(0); }
                       setTimeout(() => {
                         setSelectedOption(null);
                         setCurrentIndex((currentIndex + 1) % filteredVocab.length);
@@ -608,7 +672,8 @@
                     <button onClick={() => {
                       const isCorrect = !tfIsCorrect;
                       setSelectedOption({ type: 'false', isCorrect });
-                      if (isCorrect) { setScore(score + 5); setStreak(streak + 1); } else { setStreak(0); }
+                      if (isCorrect) { playSoundEffect('correct'); setScore(score + 5); setStreak(streak + 1); } 
+                      else { playSoundEffect('wrong'); setStreak(0); }
                       setTimeout(() => {
                         setSelectedOption(null);
                         setCurrentIndex((currentIndex + 1) % filteredVocab.length);
@@ -658,9 +723,13 @@
                           disabled={matchedIds.includes(item.id)}
                           onClick={() => {
                             if (matchSelected && matchSelected.type === 'meaning' && matchSelected.id === item.id) {
+                              playSoundEffect('correct');
                               setMatchedIds([...matchedIds, item.id]);
                               setScore(score + 20);
                               setMatchSelected(null);
+                            } else if (matchSelected && matchSelected.type === 'meaning' && matchSelected.id !== item.id) {
+                              playSoundEffect('wrong');
+                              setMatchSelected({ id: item.id, type: 'word' });
                             } else {
                               setMatchSelected({ id: item.id, type: 'word' });
                             }
@@ -680,9 +749,13 @@
                           disabled={matchedIds.includes(item.id)}
                           onClick={() => {
                             if (matchSelected && matchSelected.type === 'word' && matchSelected.id === item.id) {
+                              playSoundEffect('correct');
                               setMatchedIds([...matchedIds, item.id]);
                               setScore(score + 20);
                               setMatchSelected(null);
+                            } else if (matchSelected && matchSelected.type === 'word' && matchSelected.id !== item.id) {
+                              playSoundEffect('wrong');
+                              setMatchSelected({ id: item.id, type: 'meaning' });
                             } else {
                               setMatchSelected({ id: item.id, type: 'meaning' });
                             }
