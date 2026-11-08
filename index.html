@@ -98,11 +98,19 @@
       const [bulkText, setBulkText] = useState('');
       const [searchTerm, setSearchTerm] = useState('');
 
+      // GAME STATES
       const [activeGame, setActiveGame] = useState('menu');
       const [score, setScore] = useState(0);
       const [streak, setStreak] = useState(0);
+      const [selectedOption, setSelectedOption] = useState(null); // Trạng thái chọn ô (Đúng/Sai)
       const [spellingInput, setSpellingInput] = useState('');
       const [scrambleInput, setScrambleInput] = useState('');
+
+      const [tfMeaning, setTfMeaning] = useState('');
+      const [tfIsCorrect, setTfIsCorrect] = useState(true);
+
+      const [matchSelected, setMatchSelected] = useState(null);
+      const [matchedIds, setMatchedIds] = useState([]);
 
       useEffect(() => {
         if (firebase.auth) {
@@ -110,7 +118,7 @@
         }
       }, []);
 
-      // Bắt sự kiện bấm phím Space để lật thẻ Flashcard
+      // Lật thẻ bằng phím Space
       useEffect(() => {
         const handleKeyDown = (e) => {
           if (e.code === 'Space' && activeTab === 'flashcard') {
@@ -129,7 +137,6 @@
         if (!firebase.auth) return;
         const provider = new firebase.auth.GoogleAuthProvider();
         firebase.auth().signInWithPopup(provider).catch(() => {
-          alert('Đã đăng nhập thành công!');
           setUser({ displayName: 'Trung Nghĩa', email: 'user@example.com' });
         });
       };
@@ -150,7 +157,26 @@
         });
       }, [vocabList, selectedFolder, searchTerm]);
 
-      useEffect(() => { setCurrentIndex(0); setIsFlipped(false); }, [selectedFolder]);
+      useEffect(() => { 
+        setCurrentIndex(0); 
+        setIsFlipped(false);
+        setMatchedIds([]);
+        setMatchSelected(null);
+        setSelectedOption(null);
+      }, [selectedFolder, activeGame]);
+
+      useEffect(() => {
+        if (filteredVocab.length > 0 && activeGame === 'tf') {
+          const isCorrect = Math.random() > 0.5;
+          setTfIsCorrect(isCorrect);
+          if (isCorrect) {
+            setTfMeaning(filteredVocab[currentIndex]?.meaning);
+          } else {
+            const randomOther = filteredVocab[(currentIndex + 1) % filteredVocab.length];
+            setTfMeaning(randomOther?.meaning || filteredVocab[currentIndex]?.meaning);
+          }
+        }
+      }, [currentIndex, activeGame, filteredVocab]);
 
       const speak = (text) => {
         if ('speechSynthesis' in window) {
@@ -181,7 +207,6 @@
         const newItem = { id: Date.now().toString(), word: newWord.trim(), meaning: newMeaning.trim(), example: newExample.trim(), status: 'new', folder: targetFolderForAdd };
         setVocabList([newItem, ...vocabList]);
         setNewWord(''); setNewMeaning(''); setNewExample('');
-        alert('Đã thêm từ mới thành công!');
       };
 
       const handleBulkImport = () => {
@@ -197,7 +222,6 @@
         if (newItems.length > 0) {
           setVocabList([...newItems, ...vocabList]);
           setBulkText('');
-          alert(`Đã thêm ${newItems.length} từ vào mục "${targetFolderForAdd}"!`);
         }
       };
 
@@ -214,15 +238,11 @@
 
       const handleDeleteFolder = (folderName, e) => {
         e.stopPropagation();
-        if (folderName === 'Tất cả' || folderName === 'Career') {
-          alert('Không thể xóa thư mục mặc định!');
-          return;
-        }
-        if (confirm(`Bạn có chắc muốn xóa thư mục "${folderName}" và tất cả từ vựng bên trong?`)) {
+        if (folderName === 'Tất cả' || folderName === 'Career') return;
+        if (confirm(`Bạn có chắc muốn xóa thư mục "${folderName}"?`)) {
           setFolders(folders.filter(f => f !== folderName));
           setVocabList(vocabList.filter(i => i.folder !== folderName));
           if (selectedFolder === folderName) setSelectedFolder('Tất cả');
-          if (targetFolderForAdd === folderName) setTargetFolderForAdd('Career');
         }
       };
 
@@ -235,10 +255,29 @@
       const masteredCount = filteredVocab.filter(i => i.status === 'mastered').length;
       const percentMastered = filteredVocab.length ? Math.round((masteredCount / filteredVocab.length) * 100) : 0;
 
+      // Xử lý chọn đáp án cho Game Trắc nghiệm & Audio
+      const handleSelectAnswer = (item, idx) => {
+        if (selectedOption !== null) return; // Khóa không cho bấm liên tục
+        const isCorrect = item.id === filteredVocab[currentIndex]?.id;
+        setSelectedOption({ idx, isCorrect });
+
+        if (isCorrect) {
+          setScore(prev => prev + 10);
+          setStreak(prev => prev + 1);
+        } else {
+          setStreak(0);
+        }
+
+        setTimeout(() => {
+          setSelectedOption(null);
+          setCurrentIndex((currentIndex + 1) % filteredVocab.length);
+        }, 700);
+      };
+
       return (
         <div className="max-w-6xl mx-auto px-4 py-6 flex flex-col min-h-screen">
           
-          {/* HEADER LOGO NGOI SAO */}
+          {/* HEADER */}
           <header className="flex flex-col md:flex-row items-center justify-between gap-4 pb-6 border-b border-slate-800">
             <div className="flex items-center gap-4">
               <div className="relative w-13 h-13 rounded-2xl bg-gradient-to-tr from-amber-400 via-indigo-500 to-purple-600 p-[2.5px] star-glow flex items-center justify-center">
@@ -294,7 +333,6 @@
             <div className="flex-1 flex flex-col items-center justify-center max-w-3xl mx-auto w-full">
               <div className="w-full flex items-center justify-between mb-4 px-2">
                 <div className="flex items-center gap-3">
-                  {/* DROPDOWN CHỌN CHỦ ĐỀ SỔ XUỐNG CỰC NHANH */}
                   <div className="relative">
                     <select
                       value={selectedFolder}
@@ -328,12 +366,19 @@
                 </div>
               ) : (
                 <div className="w-full flex flex-col items-center">
-                  <div onClick={() => setIsFlipped(!isFlipped)} className={`w-full min-h-[460px] cursor-pointer relative select-none transition-all duration-300 ${isFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
+                  
+                  {/* FLASHCARD BOX KHÔNG CÒN DÒNG CHỮ 'SPACE / CHẠM ĐỂ LẬT' */}
+                  <div 
+                    onClick={() => setIsFlipped(!isFlipped)}
+                    className={`w-full min-h-[460px] cursor-pointer relative select-none transition-all duration-300 ${isFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
+                  >
                     <div className="w-full h-full min-h-[460px] rounded-3xl p-8 md:p-12 flex flex-col items-center justify-between text-center border-2 border-indigo-500/30 bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950/40 shadow-2xl relative overflow-hidden group">
+                      
+                      {/* HEADER THẺ ĐÃ BỎ DÒNG NÚT BẤM */}
                       <div className="w-full flex items-center justify-between text-slate-400 text-xs font-bold tracking-wider uppercase">
                         <span>{isFlipped ? 'MẶT SAU: NGHĨA & VÍ DỤ' : 'MẶT TRƯỚC: TỪ VỰNG'}</span>
-                        <span className="text-indigo-400 bg-indigo-900/40 px-3 py-1 rounded-full border border-indigo-700/50">Space / Chạm để lật 🔄</span>
                       </div>
+
                       {!isFlipped ? (
                         <div className="my-auto flex flex-col items-center py-6">
                           <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-indigo-200 mb-6">{filteredVocab[currentIndex]?.word}</h2>
@@ -346,6 +391,7 @@
                           {filteredVocab[currentIndex]?.example && <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl text-slate-300 text-base md:text-lg italic">"{filteredVocab[currentIndex]?.example}"</div>}
                         </div>
                       )}
+
                       <div className="w-full flex items-center justify-between text-xs text-slate-400 font-semibold pt-4 border-t border-slate-800">
                         <span>Chủ đề: <strong className="text-slate-200">{filteredVocab[currentIndex]?.folder}</strong></span>
                         <span>Trạng thái: <strong className={filteredVocab[currentIndex]?.status === 'mastered' ? 'text-emerald-400' : 'text-amber-400'}>{filteredVocab[currentIndex]?.status === 'mastered' ? 'Đã thuộc ✨' : 'Chưa thuộc 🔄'}</strong></span>
@@ -353,10 +399,34 @@
                     </div>
                   </div>
 
-                  <div className="w-full flex items-center justify-between gap-4 mt-6">
-                    <button onClick={() => markStatusAndNext('review')} className="flex-1 py-4 px-6 rounded-2xl bg-slate-900 border-2 border-amber-500/40 text-amber-400 font-black text-lg hover:bg-amber-500/10 transition-all">🔄 Cần ôn lại</button>
-                    <button onClick={() => markStatusAndNext('mastered')} className="flex-1 py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-black text-lg shadow-lg hover:from-emerald-400 hover:to-teal-500 transition-all">✨ Đã thuộc từ này</button>
+                  {/* CẶP MŨI TÊN TRÁI PHẢI VÀ NÚT CHUYỂN TRẠNG THÁI */}
+                  <div className="w-full flex items-center justify-between gap-3 mt-6">
+                    <button
+                      onClick={() => {
+                        setIsFlipped(false);
+                        setCurrentIndex(prev => (prev > 0 ? prev - 1 : filteredVocab.length - 1));
+                      }}
+                      className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500 text-white font-bold hover:bg-indigo-950/40 transition-all text-xl"
+                      title="Từ phía trước (Mũi tên trái)"
+                    >
+                      ⬅️
+                    </button>
+
+                    <button onClick={() => markStatusAndNext('review')} className="flex-1 py-4 px-4 rounded-2xl bg-slate-900 border-2 border-amber-500/40 text-amber-400 font-black text-base hover:bg-amber-500/10 transition-all">🔄 Cần ôn lại</button>
+                    <button onClick={() => markStatusAndNext('mastered')} className="flex-1 py-4 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-black text-base shadow-lg hover:from-emerald-400 hover:to-teal-500 transition-all">✨ Đã thuộc</button>
+
+                    <button
+                      onClick={() => {
+                        setIsFlipped(false);
+                        setCurrentIndex(prev => (prev < filteredVocab.length - 1 ? prev + 1 : 0));
+                      }}
+                      className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500 text-white font-bold hover:bg-indigo-950/40 transition-all text-xl"
+                      title="Từ tiếp theo (Mũi tên phải)"
+                    >
+                      ➡️
+                    </button>
                   </div>
+
                 </div>
               )}
             </div>
@@ -373,7 +443,6 @@
                     </button>
                   )}
                   
-                  {/* DROPDOWN SỔ XUỐNG Ở MINI GAME */}
                   <select
                     value={selectedFolder}
                     onChange={(e) => setSelectedFolder(e.target.value)}
@@ -426,36 +495,223 @@
                 </div>
               )}
 
+              {/* GAME 1: TRẮC NGHIỆM (ĐỔI MÀU TRỰC TIẾP TRÊN Ô KHI CHỌN) */}
               {activeGame === 'mc' && filteredVocab.length > 0 && (
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
                   <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Game 1: Trắc Nghiệm Nghĩa</span>
                   <h3 className="text-4xl font-black text-white">{filteredVocab[currentIndex]?.word}</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {filteredVocab.slice(0, 4).map((item, idx) => (
-                      <button key={idx} onClick={() => {
-                        if (item.id === filteredVocab[currentIndex]?.id) {
-                          setScore(score + 10); setStreak(streak + 1); alert('🎉 Đúng rồi!');
-                          setCurrentIndex((currentIndex + 1) % filteredVocab.length);
-                        } else { setStreak(0); alert('❌ Sai rồi!'); }
-                      }} className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-left font-bold hover:border-indigo-500">
-                        {String.fromCharCode(65 + idx)}. {item.meaning}
-                      </button>
+                    {filteredVocab.slice(0, 4).map((item, idx) => {
+                      let btnStyle = "bg-slate-950 border-slate-800 text-slate-200 hover:border-indigo-500";
+                      if (selectedOption?.idx === idx) {
+                        btnStyle = selectedOption.isCorrect 
+                          ? "bg-emerald-600 border-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30 font-black scale-105" 
+                          : "bg-rose-600 border-rose-400 text-white shadow-lg shadow-rose-500/30 font-black animate-shake";
+                      }
+                      return (
+                        <button key={idx} onClick={() => handleSelectAnswer(item, idx)} className={`p-4 rounded-2xl border text-left font-bold transition-all ${btnStyle}`}>
+                          {String.fromCharCode(65 + idx)}. {item.meaning}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* GAME 2: GÕ CHÍNH TẢ */}
+              {activeGame === 'spelling' && filteredVocab.length > 0 && (
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
+                  <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Game 2: Gõ Chính Tả</span>
+                  <h3 className="text-3xl font-black text-amber-300">{filteredVocab[currentIndex]?.meaning}</h3>
+                  <button onClick={() => speak(filteredVocab[currentIndex]?.word)} className="px-4 py-2 bg-indigo-600/20 text-indigo-300 rounded-xl font-bold text-xs">🔊 Nghe phát âm</button>
+                  <div className="flex justify-center">
+                    <input 
+                      type="text" 
+                      placeholder="Gõ lại từ tiếng Anh chính xác..." 
+                      value={spellingInput} 
+                      onChange={(e) => setSpellingInput(e.target.value)} 
+                      className={`w-full max-w-md border rounded-xl px-4 py-3 text-center text-lg font-bold transition-all ${
+                        selectedOption?.isCorrect === true ? 'bg-emerald-950 border-emerald-500 text-emerald-300' : 
+                        selectedOption?.isCorrect === false ? 'bg-rose-950 border-rose-500 text-rose-300' : 'bg-slate-950 border-slate-800 text-white'
+                      }`} 
+                    />
+                  </div>
+                  <button onClick={() => {
+                    const isCorrect = spellingInput.trim().toLowerCase() === filteredVocab[currentIndex]?.word.toLowerCase();
+                    setSelectedOption({ isCorrect });
+                    if (isCorrect) { setScore(score + 15); setStreak(streak + 1); } else { setStreak(0); }
+                    setTimeout(() => {
+                      setSelectedOption(null);
+                      setSpellingInput('');
+                      if (isCorrect) setCurrentIndex((currentIndex + 1) % filteredVocab.length);
+                    }, 800);
+                  }} className="px-8 py-3 bg-emerald-600 text-slate-950 font-black rounded-xl hover:bg-emerald-500 transition-all">Kiểm tra kết quả</button>
+                </div>
+              )}
+
+              {/* GAME 3: TRỘN CHỮ */}
+              {activeGame === 'scramble' && filteredVocab.length > 0 && (
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
+                  <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Game 3: Trộn Chữ (Scramble)</span>
+                  <h3 className="text-xl font-bold text-amber-300">Gợi ý nghĩa: "{filteredVocab[currentIndex]?.meaning}"</h3>
+                  <div className="text-3xl md:text-4xl font-black tracking-widest text-indigo-400 bg-slate-950 py-4 px-8 rounded-2xl border border-slate-800 inline-block font-mono">
+                    {scrambledWord}
+                  </div>
+                  <div className="flex justify-center">
+                    <input 
+                      type="text" 
+                      placeholder="Gõ từ hoàn chỉnh..." 
+                      value={scrambleInput} 
+                      onChange={(e) => setScrambleInput(e.target.value)} 
+                      className={`w-full max-w-md border rounded-xl px-4 py-3 text-center text-lg font-bold transition-all ${
+                        selectedOption?.isCorrect === true ? 'bg-emerald-950 border-emerald-500 text-emerald-300' : 
+                        selectedOption?.isCorrect === false ? 'bg-rose-950 border-rose-500 text-rose-300' : 'bg-slate-950 border-slate-800 text-white'
+                      }`} 
+                    />
+                  </div>
+                  <button onClick={() => {
+                    const isCorrect = scrambleInput.trim().toLowerCase() === filteredVocab[currentIndex]?.word.toLowerCase();
+                    setSelectedOption({ isCorrect });
+                    if (isCorrect) { setScore(score + 12); setStreak(streak + 1); } else { setStreak(0); }
+                    setTimeout(() => {
+                      setSelectedOption(null);
+                      setScrambleInput('');
+                      if (isCorrect) setCurrentIndex((currentIndex + 1) % filteredVocab.length);
+                    }, 800);
+                  }} className="px-8 py-3 bg-emerald-600 text-slate-950 font-black rounded-xl hover:bg-emerald-500 transition-all">Kiểm tra</button>
+                </div>
+              )}
+
+              {/* GAME 4: ĐÚNG HAY SAI (ĐỔI MÀU Ô ĐÚNG/SAI LẬP TỨC) */}
+              {activeGame === 'tf' && filteredVocab.length > 0 && (
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
+                  <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Game 4: Phản Xạ Đúng / Sai</span>
+                  <div className="bg-slate-950 p-6 rounded-2xl border border-slate-800 space-y-2">
+                    <h3 className="text-3xl font-black text-white">{filteredVocab[currentIndex]?.word}</h3>
+                    <p className="text-xl text-amber-300 font-bold">Nghĩa là: "{tfMeaning}"</p>
+                  </div>
+                  <div className="flex justify-center gap-4">
+                    <button onClick={() => {
+                      const isCorrect = tfIsCorrect;
+                      setSelectedOption({ type: 'true', isCorrect });
+                      if (isCorrect) { setScore(score + 5); setStreak(streak + 1); } else { setStreak(0); }
+                      setTimeout(() => {
+                        setSelectedOption(null);
+                        setCurrentIndex((currentIndex + 1) % filteredVocab.length);
+                      }, 700);
+                    }} className={`px-8 py-4 font-black rounded-2xl text-lg flex-1 max-w-xs transition-all ${
+                      selectedOption?.type === 'true' 
+                        ? (selectedOption.isCorrect ? 'bg-emerald-500 text-slate-950 scale-105' : 'bg-rose-600 text-white')
+                        : 'bg-emerald-600 text-slate-950 hover:bg-emerald-500'
+                    }`}>✓ ĐÚNG</button>
+                    
+                    <button onClick={() => {
+                      const isCorrect = !tfIsCorrect;
+                      setSelectedOption({ type: 'false', isCorrect });
+                      if (isCorrect) { setScore(score + 5); setStreak(streak + 1); } else { setStreak(0); }
+                      setTimeout(() => {
+                        setSelectedOption(null);
+                        setCurrentIndex((currentIndex + 1) % filteredVocab.length);
+                      }, 700);
+                    }} className={`px-8 py-4 font-black rounded-2xl text-lg flex-1 max-w-xs transition-all ${
+                      selectedOption?.type === 'false' 
+                        ? (selectedOption.isCorrect ? 'bg-emerald-500 text-slate-950 scale-105' : 'bg-rose-600 text-white')
+                        : 'bg-rose-600 text-white hover:bg-rose-500'
+                    }`}>✕ SAI</button>
+                  </div>
+                </div>
+              )}
+
+              {/* GAME 5: NGHE ĐOÁN TỪ */}
+              {activeGame === 'audio' && filteredVocab.length > 0 && (
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
+                  <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Game 5: Nghe Đoán Từ</span>
+                  <div>
+                    <button onClick={() => speak(filteredVocab[currentIndex]?.word)} className="px-8 py-5 rounded-2xl bg-indigo-600 text-white font-black text-lg shadow-lg shadow-indigo-600/30 hover:scale-105 transition-all">🔊 Bấm Để Nghe Âm Thanh</button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    {filteredVocab.slice(0, 4).map((item, idx) => {
+                      let btnStyle = "bg-slate-950 border-slate-800 text-white hover:border-indigo-500";
+                      if (selectedOption?.idx === idx) {
+                        btnStyle = selectedOption.isCorrect 
+                          ? "bg-emerald-600 border-emerald-400 text-slate-950 font-black scale-105" 
+                          : "bg-rose-600 border-rose-400 text-white font-black";
+                      }
+                      return (
+                        <button key={idx} onClick={() => handleSelectAnswer(item, idx)} className={`p-4 rounded-2xl border font-bold transition-all ${btnStyle}`}>
+                          {item.word}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* GAME 6: NỐI CẶP */}
+              {activeGame === 'match' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-6">
+                  <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Game 6: Nối Cặp Từ & Nghĩa</span>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {filteredVocab.slice(0, 4).map((item) => (
+                      <React.Fragment key={item.id}>
+                        <button
+                          disabled={matchedIds.includes(item.id)}
+                          onClick={() => {
+                            if (matchSelected && matchSelected.type === 'meaning' && matchSelected.id === item.id) {
+                              setMatchedIds([...matchedIds, item.id]);
+                              setScore(score + 20);
+                              setMatchSelected(null);
+                            } else {
+                              setMatchSelected({ id: item.id, type: 'word' });
+                            }
+                          }}
+                          className={`p-4 rounded-xl border text-xs font-bold transition-all ${
+                            matchedIds.includes(item.id)
+                              ? 'opacity-20 border-slate-800 bg-slate-950'
+                              : matchSelected?.id === item.id && matchSelected?.type === 'word'
+                              ? 'border-indigo-500 bg-indigo-600 text-white shadow-lg'
+                              : 'bg-slate-950 border-indigo-500/40 text-indigo-300 hover:border-indigo-500'
+                          }`}
+                        >
+                          {item.word}
+                        </button>
+
+                        <button
+                          disabled={matchedIds.includes(item.id)}
+                          onClick={() => {
+                            if (matchSelected && matchSelected.type === 'word' && matchSelected.id === item.id) {
+                              setMatchedIds([...matchedIds, item.id]);
+                              setScore(score + 20);
+                              setMatchSelected(null);
+                            } else {
+                              setMatchSelected({ id: item.id, type: 'meaning' });
+                            }
+                          }}
+                          className={`p-4 rounded-xl border text-xs font-bold transition-all ${
+                            matchedIds.includes(item.id)
+                              ? 'opacity-20 border-slate-800 bg-slate-950'
+                              : matchSelected?.id === item.id && matchSelected?.type === 'meaning'
+                              ? 'border-amber-500 bg-amber-500 text-slate-950 shadow-lg'
+                              : 'bg-slate-950 border-amber-500/40 text-amber-300 hover:border-amber-500'
+                          }`}
+                        >
+                          {item.meaning}
+                        </button>
+                      </React.Fragment>
                     ))}
                   </div>
                 </div>
               )}
+
             </div>
           )}
 
           {/* TAB 3: QUẢN LÝ TỪ VỰNG & CHỦ ĐỀ */}
           {activeTab === 'add' && (
             <div className="flex-1 max-w-4xl mx-auto w-full space-y-8">
-              
-              {/* FORM THÊM TỪ THỦ CÔNG */}
               <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-bold text-white">✍️ Thêm từ thủ công</h3>
-                  {/* DROPDOWN CHỌN MỤC LƯU MỚI */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-slate-400 font-semibold">Lưu vào:</span>
                     <select
@@ -480,17 +736,13 @@
                 </form>
               </div>
 
-              {/* BULK IMPORT */}
               <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
                 <h3 className="text-base font-bold text-white">📋 Dán danh sách hàng loạt (Bulk Add)</h3>
                 <textarea rows="4" placeholder={`climb the corporate ladder - thăng tiến công việc - He worked hard.\nwork-life balance - cân bằng cuộc sống - Maintaining balance is crucial.`} value={bulkText} onChange={(e) => setBulkText(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-white font-mono leading-relaxed"></textarea>
                 <button onClick={handleBulkImport} className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-black text-sm rounded-xl transition-all">⚡ Nhập tất cả danh sách trên</button>
               </div>
 
-              {/* KHUNG QUẢN LÝ CHỦ ĐỀ & DANH SÁCH TỪ VỰNG GỘP CHUNG */}
               <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-6">
-                
-                {/* 1. THANH TẠO VÀ CHỌN CHỦ ĐỀ NẰM NGAY ĐẦU DANH SÁCH */}
                 <div className="space-y-4 pb-4 border-b border-slate-800">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
                     <h3 className="text-base font-bold text-white">📁 Quản lý Chủ đề & Danh sách từ</h3>
@@ -511,7 +763,6 @@
                     </div>
                   </div>
 
-                  {/* DROPDOWN CHỌN XEM DANH SÁCH CHỦ ĐỀ */}
                   <div className="flex items-center gap-3 pt-2">
                     <span className="text-xs font-semibold text-slate-400 whitespace-nowrap">Đang xem chủ đề:</span>
                     <select
@@ -537,7 +788,6 @@
                   </div>
                 </div>
 
-                {/* 2. BỘ LỌC TÌM KIẾM TỪ VỰNG */}
                 <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                   <div className="text-xs font-semibold text-slate-400">
                     Hiển thị <strong className="text-indigo-400">{filteredVocab.length}</strong> từ vựng
@@ -545,7 +795,6 @@
                   <input type="text" placeholder="Tìm kiếm từ hoặc nghĩa..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-64 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white" />
                 </div>
 
-                {/* 3. DANH SÁCH TỪ VỰNG CHI TIẾT */}
                 <div className="grid grid-cols-1 gap-3">
                   {filteredVocab.length === 0 ? (
                     <div className="text-center py-8 text-slate-500 text-xs font-semibold">Chưa có từ vựng nào trong chủ đề này.</div>
@@ -595,7 +844,7 @@
             </div>
           )}
 
-          {/* FOOTER NHẬN DIỆN TÁC GIẢ */}
+          {/* FOOTER */}
           <footer className="mt-auto pt-8 pb-4 text-center text-xs text-slate-500 border-t border-slate-800/60">
             VocabMaster Web • Hệ thống ôn tập từ vựng • Developed by Trung Nghĩa
           </footer>
