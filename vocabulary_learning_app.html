@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VocabMaster B2 - Học Từ Vựng & Collocations</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM (Production CDN) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel Standalone for JSX compilation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Google Fonts - Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    /* Smooth Gentle Fade Animation (No 3D Flip Dizziness) */
+    .fade-enter {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+    .fade-enter-active {
+      opacity: 1;
+      transform: scale(1);
+      transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+    }
+
+    /* 3D Flip style option if toggled */
+    .perspective-1000 {
+      perspective: 1000px;
+    }
+    .transform-style-3d {
+      transform-style: preserve-3d;
+      transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .flipped {
+      transform: rotateY(180deg);
+    }
+    .backface-hidden {
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+    .rotate-y-180 {
+      transform: rotateY(180deg);
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(156, 163, 175, 0.4);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // B2 Level Career Collocations & Grammar Data
+    const INITIAL_CATEGORIES = [
+      { id: 'cat-career', name: 'Career (B2 Collocations)', description: 'Các cụm từ & ngữ pháp nâng cấp nói/viết về Công việc' },
+      { id: 'cat-general', name: 'General Business', description: 'Từ vựng thương mại tổng hợp' }
+    ];
+
+    const INITIAL_VOCABULARY = [
+      { id: '1', catId: 'cat-career', word: 'pursue a career', meaning: 'Theo đuổi sự nghiệp', type: 'collocation', example: 'She decided to move to London to pursue a career in finance.', learned: false },
+      { id: '2', catId: 'cat-career', word: 'climb the corporate ladder', meaning: 'Thăng tiến trong công ty', type: 'idiom / phrase', example: 'He worked long hours to climb the corporate ladder quickly.', learned: false },
+      { id: '3', catId: 'cat-career', word: 'work-life balance', meaning: 'Cân bằng công việc & cuộc sống', type: 'noun phrase', example: 'Maintaining a healthy work-life balance prevents professional burnout.', learned: true },
+      { id: '4', catId: 'cat-career', word: 'gain practical experience', meaning: 'Tích lũy kinh nghiệm thực tế', type: 'collocation', example: 'Internships allow students to gain practical experience before graduating.', learned: false },
+      { id: '5', catId: 'cat-career', word: 'competitive salary', meaning: 'Mức lương cạnh tranh / hấp dẫn', type: 'adjective phrase', example: 'The tech firm offers a competitive salary and flexible work arrangement.', learned: false },
+      { id: '6', catId: 'cat-career', word: 'professional development', meaning: 'Phát triển chuyên môn', type: 'noun phrase', example: 'Attending workshops contributes significantly to your professional development.', learned: false },
+      { id: '7', catId: 'cat-career', word: 'career path', meaning: 'Lộ trình phát triển nghề nghiệp', type: 'noun phrase', example: 'She is assessing her options to choose the right career path.', learned: false },
+      { id: '8', catId: 'cat-career', word: 'occupational hazard', meaning: 'Rủi ro / nguy cơ nghề nghiệp', type: 'noun phrase', example: 'Eye strain is a common occupational hazard for software engineers.', learned: true },
+      
+      // General Business
+      { id: '9', catId: 'cat-general', word: 'collaborate', meaning: 'Hợp tác, phối hợp', type: 'verb', example: 'We need to collaborate with the marketing team.', learned: false },
+      { id: '10', catId: 'cat-general', word: 'implement', meaning: 'Thực thi, áp dụng', type: 'verb', example: 'We will implement the new policy next month.', learned: false }
+    ];
+
+    // SVG Icons
+    const IconSparkles = () => <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>;
+    const IconVolume = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>;
+    const IconEye = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>;
+    const IconArrowLeft = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"/></svg>;
+    const IconArrowRight = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>;
+    const IconCheck = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>;
+    const IconRefresh = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>;
+    const IconShuffle = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h2m8 0h2a2 2 0 012 2v8a2 2 0 01-2 2h-2m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>;
+    const IconFolder = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>;
+
+    // Speech Synthesizer
+    const speakWord = (text) => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.85;
+        window.speechSynthesis.speak(utterance);
+      }
+    };
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('flashcards');
+      const [categories, setCategories] = useState(() => {
+        const saved = localStorage.getItem('vocab_cats_b2');
+        return saved ? JSON.parse(saved) : INITIAL_CATEGORIES;
+      });
+      const [selectedCatId, setSelectedCatId] = useState('cat-career');
+      
+      const [vocabList, setVocabList] = useState(() => {
+        const saved = localStorage.getItem('vocab_data_b2');
+        return saved ? JSON.parse(saved) : INITIAL_VOCABULARY;
+      });
+
+      const [stats, setStats] = useState(() => {
+        const saved = localStorage.getItem('vocab_stats_b2');
+        return saved ? JSON.parse(saved) : { score: 0, streak: 3, correctAnswers: 0, totalAnswers: 0 };
+      });
+
+      useEffect(() => {
+        localStorage.setItem('vocab_cats_b2', JSON.stringify(categories));
+      }, [categories]);
+
+      useEffect(() => {
+        localStorage.setItem('vocab_data_b2', JSON.stringify(vocabList));
+      }, [vocabList]);
+
+      useEffect(() => {
+        localStorage.setItem('vocab_stats_b2', JSON.stringify(stats));
+      }, [stats]);
+
+      const toggleLearned = (id, targetStatus) => {
+        setVocabList(prev => prev.map(item => item.id === id ? { ...item, learned: targetStatus ?? !item.learned } : item));
+      };
+
+      const recordGameScore = (scoreAdd, isCorrect) => {
+        setStats(prev => ({
+          ...prev,
+          score: prev.score + scoreAdd,
+          totalAnswers: prev.totalAnswers + 1,
+          correctAnswers: isCorrect ? prev.correctAnswers + 1 : prev.correctAnswers
+        }));
+      };
+
+      // Current active category vocabularies
+      const activeVocabList = useMemo(() => {
+        if (selectedCatId === 'all') return vocabList;
+        return vocabList.filter(v => v.catId === selectedCatId);
+      }, [vocabList, selectedCatId]);
+
+      return (
+        <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
+          {/* Top Header */}
+          <header className="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
+            <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-indigo-600/20 border border-indigo-500/30">
+                  <IconSparkles />
+                </div>
+                <div>
+                  <h1 className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                    VocabMaster B2
+                  </h1>
+                  <p className="text-[11px] text-slate-400 font-medium">Ôn Cụm Từ & Collocations Nâng Cao</p>
+                </div>
+              </div>
+
+              {/* Badges */}
+              <div className="flex items-center gap-3">
+                <div className="px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold flex items-center gap-1.5">
+                  <span>🔥 {stats.streak} Ngày</span>
+                </div>
+                <div className="px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold flex items-center gap-1.5">
+                  <span>🏆 {stats.score} Đ</span>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* Folder Category Bar */}
+          <div className="bg-slate-900/50 border-b border-slate-800/80 py-3 px-4">
+            <div className="max-w-5xl mx-auto flex items-center justify-between gap-3 overflow-x-auto pb-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1 shrink-0">
+                  <IconFolder /> Thư mục:
+                </span>
+                <select
+                  value={selectedCatId}
+                  onChange={(e) => setSelectedCatId(e.target.value)}
+                  className="bg-slate-950 border border-slate-700 text-indigo-300 font-bold text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="all">📂 Tất cả thư mục ({vocabList.length} từ)</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>
+                      📁 {cat.name} ({vocabList.filter(v => v.catId === cat.id).length} từ)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="text-xs text-slate-400 font-medium hidden sm:block">
+                Đang ôn tập: <span className="text-indigo-400 font-bold">{activeVocabList.length} từ vựng</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Bar */}
+          <div className="max-w-md mx-auto w-full px-4 pt-6">
+            <nav className="flex p-1.5 rounded-2xl bg-slate-900 border border-slate-800 text-sm font-semibold">
+              {[
+                { key: 'flashcards', label: '🎴 Thẻ Thẻ' },
+                { key: 'games', label: '🎮 Mini Game' },
+                { key: 'manage', label: '✏️ Quản Lý' },
+                { key: 'stats', label: '📊 Tiến Độ' }
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`flex-1 py-2.5 rounded-xl transition-all duration-200 ${
+                    activeTab === tab.key 
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30 font-bold' 
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {/* Tab Views */}
+          <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6">
+            {activeTab === 'flashcards' && (
+              <FlashcardsView vocabList={activeVocabList} toggleLearned={toggleLearned} />
+            )}
+            {activeTab === 'games' && (
+              <GamesView vocabList={activeVocabList} recordGameScore={recordGameScore} />
+            )}
+            {activeTab === 'manage' && (
+              <ManageView 
+                vocabList={vocabList} 
+                setVocabList={setVocabList} 
+                categories={categories}
+                setCategories={setCategories}
+                selectedCatId={selectedCatId}
+              />
+            )}
+            {activeTab === 'stats' && (
+              <StatsView vocabList={activeVocabList} stats={stats} />
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    /* ========================================================
+       1. FLASHCARDS VIEW (WITH EASY FADE & 3D TOGGLE OPTION)
+       ======================================================== */
+    function FlashcardsView({ vocabList, toggleLearned }) {
+      const [filter, setFilter] = useState('all');
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [showMeaning, setShowMeaning] = useState(false);
+      const [animMode, setAnimMode] = useState('fade'); // 'fade' (êm mắt) or 'flip3d'
+
+      const filteredList = useMemo(() => {
+        return vocabList.filter(item => {
+          if (filter === 'unlearned') return !item.learned;
+          if (filter === 'learned') return item.learned;
+          return true;
+        });
+      }, [vocabList, filter]);
+
+      const currentCard = filteredList[currentIndex];
+
+      useEffect(() => {
+        setShowMeaning(false);
+        if (currentIndex >= filteredList.length && filteredList.length > 0) {
+          setCurrentIndex(0);
+        }
+      }, [filter, filteredList.length]);
+
+      const handleNext = () => {
+        if (filteredList.length === 0) return;
+        setShowMeaning(false);
+        setTimeout(() => {
+          setCurrentIndex(prev => (prev + 1) % filteredList.length);
+        }, 120);
+      };
+
+      const handlePrev = () => {
+        if (filteredList.length === 0) return;
+        setShowMeaning(false);
+        setTimeout(() => {
+          setCurrentIndex(prev => (prev - 1 + filteredList.length) % filteredList.length);
+        }, 120);
+      };
+
+      // Mark learned status & AUTO ADVANCE
+      const handleMarkStatus = (targetStatus) => {
+        if (!currentCard) return;
+        toggleLearned(currentCard.id, targetStatus);
+        handleNext();
+      };
+
+      const handleShuffle = () => {
+        setShowMeaning(false);
+        if (filteredList.length > 1) {
+          const rand = Math.floor(Math.random() * filteredList.length);
+          setCurrentIndex(rand);
+        }
+      };
+
+      if (filteredList.length === 0) {
+        return (
+          <div className="text-center py-20 bg-slate-900/60 border border-slate-800 rounded-3xl max-w-lg mx-auto">
+            <p className="text-5xl mb-4">🎉</p>
+            <h3 className="text-2xl font-bold mb-2">Không có từ vựng trong mục này!</h3>
+            <p className="text-slate-400 text-base">
+              {filter === 'unlearned' ? 'Chúc mừng! Bạn đã thuộc hết từ vựng trong danh mục này.' : 'Hãy chọn hoặc thêm từ vựng mới.'}
+            </p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="max-w-2xl mx-auto space-y-6">
+          {/* Controls Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex bg-slate-900 p-1.5 rounded-2xl border border-slate-800 text-sm font-semibold">
+              {[
+                { key: 'all', label: `Tất cả (${vocabList.length})` },
+                { key: 'unlearned', label: `Cần học (${vocabList.filter(i => !i.learned).length})` },
+                { key: 'learned', label: `Đã thuộc (${vocabList.filter(i => i.learned).length})` }
+              ].map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => setFilter(t.key)}
+                  className={`px-3.5 py-1.5 rounded-xl transition ${
+                    filter === t.key ? 'bg-indigo-600 text-white font-bold shadow-md' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Eye Comfort Toggle */}
+              <button
+                onClick={() => setAnimMode(animMode === 'fade' ? 'flip3d' : 'fade')}
+                className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-bold text-slate-300 hover:text-indigo-400 flex items-center gap-1.5 transition"
+                title="Đổi hiệu ứng chuyển mặt thẻ"
+              >
+                <IconEye /> Chế độ: {animMode === 'fade' ? 'Êm mắt (Fade)' : 'Lật 3D'}
+              </button>
+
+              <button
+                onClick={handleShuffle}
+                className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-indigo-400 text-xs font-bold transition active:scale-95"
+                title="Xáo từ"
+              >
+                <IconShuffle />
+              </button>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm font-bold text-slate-400">
+              <span>Thẻ {currentIndex + 1} / {filteredList.length}</span>
+              <span>{Math.round(((currentIndex + 1) / filteredList.length) * 100)}%</span>
+            </div>
+            <div className="h-3 w-full bg-slate-900 rounded-full overflow-hidden border border-slate-800/80">
+              <div 
+                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
+                style={{ width: `${((currentIndex + 1) / filteredList.length) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {/* LARGE FLASHCARD CONTAINER */}
+          {animMode === 'fade' ? (
+            /* MODE 1: GENTLE FADE & SLIDE (Eye Comfort - No Dizziness) */
+            <div 
+              onClick={() => setShowMeaning(!showMeaning)}
+              className="w-full min-h-[460px] sm:min-h-[500px] cursor-pointer rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950/90 border-2 border-indigo-500/40 p-8 sm:p-10 flex flex-col justify-between items-center text-center shadow-2xl shadow-indigo-500/10 transition-transform active:scale-[0.99]"
+            >
+              <div className="w-full flex justify-between items-center">
+                <span className={`text-xs sm:text-sm font-extrabold uppercase px-4 py-1.5 rounded-full border ${
+                  currentCard.learned 
+                    ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400' 
+                    : 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                }`}>
+                  {currentCard.learned ? '✓ Đã thuộc' : '• Cần học'}
+                </span>
+                
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    speakWord(currentCard.word);
+                  }}
+                  className="p-4 rounded-2xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 transition transform active:scale-90 shadow-md"
+                  title="Nghe phát âm"
+                >
+                  <IconVolume />
+                </button>
+              </div>
+
+              {/* CARD CONTENT WITH GENTLE TRANSITION */}
+              {!showMeaning ? (
+                <div className="my-auto py-4 animate-fade">
+                  <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white tracking-tight mb-4 leading-tight">
+                    {currentCard.word}
+                  </h2>
+                  {currentCard.type && (
+                    <span className="inline-block text-sm sm:text-base font-extrabold uppercase tracking-widest text-indigo-300 bg-indigo-950/90 px-4 py-1.5 rounded-xl border border-indigo-700/60 shadow-inner">
+                      {currentCard.type}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="my-auto space-y-5 max-w-md animate-fade">
+                  <h3 className="text-3xl sm:text-4xl md:text-5xl font-black text-amber-300 leading-snug">
+                    {currentCard.meaning}
+                  </h3>
+                  {currentCard.example && (
+                    <div className="bg-black/40 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/15 text-left shadow-lg">
+                      <p className="text-xs uppercase font-extrabold text-purple-300 mb-1.5 tracking-wider">Ví dụ ngữ cảnh:</p>
+                      <p className="italic text-sm sm:text-base text-slate-100 font-medium leading-relaxed">
+                        "{currentCard.example}"
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-indigo-300 bg-indigo-950/70 px-5 py-2.5 rounded-full border border-indigo-800/50 shadow-sm">
+                <span>{showMeaning ? '👉 Chạm để xem lại Từ tiếng Anh' : '👉 Chạm thẻ để xem Giải Nghĩa & Ví dụ'}</span>
+              </div>
+            </div>
+          ) : (
+            /* MODE 2: CLASSIC 3D FLIP CARD */
+            <div className="perspective-1000 w-full min-h-[460px] sm:min-h-[500px] cursor-pointer">
+              <div 
+                onClick={() => setShowMeaning(!showMeaning)}
+                className={`relative w-full h-[460px] sm:h-[500px] rounded-3xl transform-style-3d shadow-2xl ${showMeaning ? 'flipped' : ''}`}
+              >
+                {/* FRONT */}
+                <div className="absolute inset-0 w-full h-full backface-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950/90 border-2 border-indigo-500/40 rounded-3xl p-8 sm:p-10 flex flex-col justify-between items-center text-center shadow-2xl">
+                  <div className="w-full flex justify-between items-center">
+                    <span className={`text-xs sm:text-sm font-extrabold uppercase px-4 py-1.5 rounded-full border ${
+                      currentCard.learned ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400' : 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                    }`}>
+                      {currentCard.learned ? '✓ Đã thuộc' : '• Cần học'}
+                    </span>
+                    <button onClick={(e) => { e.stopPropagation(); speakWord(currentCard.word); }} className="p-4 rounded-2xl bg-indigo-600/30 text-indigo-200 border border-indigo-500/40">
+                      <IconVolume />
+                    </button>
+                  </div>
+                  <div className="my-auto py-4">
+                    <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-white mb-4 leading-tight">{currentCard.word}</h2>
+                    {currentCard.type && <span className="inline-block text-sm font-extrabold uppercase text-indigo-300 bg-indigo-950/90 px-4 py-1.5 rounded-xl border border-indigo-700/60">{currentCard.type}</span>}
+                  </div>
+                  <div className="text-xs font-bold text-indigo-300 bg-indigo-950/70 px-5 py-2.5 rounded-full border border-indigo-800/50">Chạm thẻ để lật xem nghĩa</div>
+                </div>
+
+                {/* BACK */}
+                <div className="absolute inset-0 w-full h-full backface-hidden rotate-y-180 bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-950 border-2 border-purple-500/50 rounded-3xl p-8 sm:p-10 flex flex-col justify-between items-center text-center shadow-2xl">
+                  <div className="w-full flex justify-between items-center">
+                    <span className="text-xs font-extrabold uppercase text-purple-200 bg-purple-950/70 px-4 py-1.5 rounded-full border border-purple-700/60">NGHĨA & VÍ DỤ</span>
+                    <button onClick={(e) => { e.stopPropagation(); speakWord(currentCard.word); }} className="p-4 rounded-2xl bg-white/15 text-white border border-white/20">
+                      <IconVolume />
+                    </button>
+                  </div>
+                  <div className="my-auto space-y-4 max-w-md">
+                    <h3 className="text-3xl sm:text-4xl font-black text-amber-300">{currentCard.meaning}</h3>
+                    {currentCard.example && (
+                      <div className="bg-black/40 p-4 rounded-2xl border border-white/15 text-left">
+                        <p className="italic text-sm text-slate-100">"{currentCard.example}"</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-xs font-bold text-purple-200 bg-purple-950/70 px-5 py-2.5 rounded-full border border-purple-800/50">Chạm để lật lại</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ACTION BUTTONS (AUTO-ADVANCE ON CLICK) */}
+          <div className="grid grid-cols-4 gap-3 sm:gap-4 pt-2">
+            <button
+              onClick={handlePrev}
+              className="py-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold rounded-2xl flex items-center justify-center transition active:scale-95 shadow-md"
+            >
+              <IconArrowLeft />
+            </button>
+
+            {/* Need Review -> Auto advance */}
+            <button
+              onClick={() => handleMarkStatus(false)}
+              className="col-span-1 py-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-sm sm:text-base rounded-2xl flex items-center justify-center gap-1.5 transition active:scale-95 shadow-md"
+            >
+              <IconRefresh /> Cần Ôn
+            </button>
+
+            {/* Mastered -> Auto advance */}
+            <button
+              onClick={() => handleMarkStatus(true)}
+              className="col-span-1 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm sm:text-base rounded-2xl flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-600/30 transition active:scale-95"
+            >
+              <IconCheck /> Đã Thuộc
+            </button>
+
+            <button
+              onClick={handleNext}
+              className="py-4 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold rounded-2xl flex items-center justify-center transition active:scale-95 shadow-md"
+            >
+              <IconArrowRight />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ========================================================
+       2. GAMES VIEW
+       ======================================================== */
+    function GamesView({ vocabList, recordGameScore }) {
+      const [gameType, setGameType] = useState(null);
+
+      if (vocabList.length < 4) {
+        return (
+          <div className="text-center py-16 bg-slate-900 border border-slate-800 rounded-3xl max-w-md mx-auto">
+            <p className="text-4xl mb-3">⚠️</p>
+            <h3 className="text-lg font-bold mb-2">Cần ít nhất 4 từ vựng!</h3>
+            <p className="text-slate-400 text-xs">Vui lòng chọn thư mục khác hoặc thêm từ mới trong tab Quản Lý.</p>
+          </div>
+        );
+      }
+
+      return (
+        <div className="max-w-2xl mx-auto space-y-6">
+          {!gameType ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div 
+                onClick={() => setGameType('mc')}
+                className="bg-slate-900 hover:bg-slate-800/80 border border-slate-800 hover:border-indigo-500/50 p-6 rounded-3xl cursor-pointer transition shadow-xl group"
+              >
+                <div className="text-3xl mb-3">🎯</div>
+                <h3 className="font-bold text-lg mb-1 group-hover:text-indigo-400">1. Trắc Nghiệm</h3>
+                <p className="text-xs text-slate-400">Chọn nghĩa chuẩn xác từ 4 đáp án gợi ý.</p>
+              </div>
+
+              <div 
+                onClick={() => setGameType('matching')}
+                className="bg-slate-900 hover:bg-slate-800/80 border border-slate-800 hover:border-purple-500/50 p-6 rounded-3xl cursor-pointer transition shadow-xl group"
+              >
+                <div className="text-3xl mb-3">🧩</div>
+                <h3 className="font-bold text-lg mb-1 group-hover:text-purple-400">2. Nối Cặp Từ</h3>
+                <p className="text-xs text-slate-400">Ghép từ Tiếng Anh với nghĩa Tiếng Việt tương ứng.</p>
+              </div>
+
+              <div 
+                onClick={() => setGameType('spelling')}
+                className="bg-slate-900 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/50 p-6 rounded-3xl cursor-pointer transition shadow-xl group"
+              >
+                <div className="text-3xl mb-3">🎧</div>
+                <h3 className="font-bold text-lg mb-1 group-hover:text-emerald-400">3. Nghe & Gõ Từ</h3>
+                <p className="text-xs text-slate-400">Nghe phát âm và điền chính xác cụm từ.</p>
+              </div>
+
+              <div 
+                onClick={() => setGameType('scramble')}
+                className="bg-slate-900 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/50 p-6 rounded-3xl cursor-pointer transition shadow-xl group"
+              >
+                <div className="text-3xl mb-3">🔤</div>
+                <h3 className="font-bold text-lg mb-1 group-hover:text-amber-400">4. Trộn Chữ</h3>
+                <p className="text-xs text-slate-400">Sắp xếp các ký tự bị xáo trộn.</p>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <button
+                onClick={() => setGameType(null)}
+                className="mb-4 text-xs font-bold text-slate-400 hover:text-white flex items-center gap-1 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800"
+              >
+                ← Chọn game khác
+              </button>
+
+              {gameType === 'mc' && <MultipleChoiceGame vocabList={vocabList} recordGameScore={recordGameScore} />}
+              {gameType === 'matching' && <MatchingGame vocabList={vocabList} recordGameScore={recordGameScore} />}
+              {gameType === 'spelling' && <SpellingGame vocabList={vocabList} recordGameScore={recordGameScore} />}
+              {gameType === 'scramble' && <ScrambleGame vocabList={vocabList} recordGameScore={recordGameScore} />}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Mini Game: Multiple Choice
+    function MultipleChoiceGame({ vocabList, recordGameScore }) {
+      const [question, setQuestion] = useState(null);
+      const [selectedOption, setSelectedOption] = useState(null);
+
+      const nextQuestion = () => {
+        setSelectedOption(null);
+        const target = vocabList[Math.floor(Math.random() * vocabList.length)];
+        const others = vocabList.filter(w => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, 3);
+        const options = [...others, target].sort(() => 0.5 - Math.random());
+        setQuestion({ target, options });
+      };
+
+      useEffect(() => { nextQuestion(); }, [vocabList]);
+
+      const handleSelect = (opt) => {
+        if (selectedOption) return;
+        setSelectedOption(opt);
+        const isCorrect = opt.id === question.target.id;
+        recordGameScore(isCorrect ? 10 : 0, isCorrect);
+      };
+
+      if (!question) return null;
+
+      return (
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl text-center space-y-6">
+          <span className="text-xs font-bold uppercase text-indigo-400 tracking-wider">Trắc Nghiệm B2</span>
+          <h3 className="text-3xl font-black text-white">{question.target.word}</h3>
+          
+          <div className="grid grid-cols-1 gap-3">
+            {question.options.map(opt => {
+              let btnClass = "bg-slate-800/60 border-slate-700 text-slate-200 hover:bg-indigo-950/40 hover:border-indigo-500/50";
+              if (selectedOption) {
+                if (opt.id === question.target.id) btnClass = "bg-emerald-600 text-white border-emerald-500 font-bold";
+                else if (opt.id === selectedOption.id) btnClass = "bg-rose-600 text-white border-rose-500 font-bold";
+                else btnClass = "opacity-30 bg-slate-900 border-transparent";
+              }
+
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => handleSelect(opt)}
+                  className={`p-4 rounded-2xl border text-left text-sm font-medium transition ${btnClass}`}
+                >
+                  {opt.meaning}
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedOption && (
+            <button
+              onClick={nextQuestion}
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl transition shadow-lg shadow-indigo-600/30"
+            >
+              Câu Tiếp Theo →
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // Mini Game: Matching
+    function MatchingGame({ vocabList, recordGameScore }) {
+      const [cards, setCards] = useState([]);
+      const [selectedCards, setSelectedCards] = useState([]);
+      const [matchedIds, setMatchedIds] = useState([]);
+
+      const initGame = () => {
+        const sample = [...vocabList].sort(() => 0.5 - Math.random()).slice(0, 4);
+        const wordCards = sample.map(item => ({ id: `w-${item.id}`, refId: item.id, text: item.word, type: 'word' }));
+        const meaningCards = sample.map(item => ({ id: `m-${item.id}`, refId: item.id, text: item.meaning, type: 'meaning' }));
+        setCards([...wordCards, ...meaningCards].sort(() => 0.5 - Math.random()));
+        setSelectedCards([]);
+        setMatchedIds([]);
+      };
+
+      useEffect(() => { initGame(); }, [vocabList]);
+
+      const handleCardClick = (card) => {
+        if (selectedCards.length === 2 || selectedCards.find(c => c.id === card.id) || matchedIds.includes(card.refId)) return;
+        const newSel = [...selectedCards, card];
+        setSelectedCards(newSel);
+
+        if (newSel.length === 2) {
+          if (newSel[0].refId === newSel[1].refId && newSel[0].type !== newSel[1].type) {
+            setMatchedIds(prev => [...prev, newSel[0].refId]);
+            setSelectedCards([]);
+            recordGameScore(15, true);
+          } else {
+            recordGameScore(0, false);
+            setTimeout(() => setSelectedCards([]), 700);
+          }
+        }
+      };
+
+      return (
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl text-center space-y-6">
+          <span className="text-xs font-bold uppercase text-purple-400 tracking-wider">Nối Cặp Từ</span>
+          <h3 className="text-lg font-bold">Ghép từ Tiếng Anh & Nghĩa Tiếng Việt tương ứng</h3>
+
+          {matchedIds.length === 4 ? (
+            <div className="py-6 space-y-4">
+              <p className="text-2xl font-black text-amber-400">🎉 Ghép từ xuất sắc!</p>
+              <button onClick={initGame} className="px-6 py-3 bg-purple-600 text-white font-bold rounded-2xl">Ván Mới</button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {cards.map(card => {
+                const isMatched = matchedIds.includes(card.refId);
+                const isSelected = selectedCards.find(c => c.id === card.id);
+                if (isMatched) return <div key={card.id} className="h-20 opacity-0" />;
+
+                return (
+                  <button
+                    key={card.id}
+                    onClick={() => handleCardClick(card)}
+                    className={`h-20 p-2 rounded-2xl border text-xs font-semibold flex items-center justify-center transition ${
+                      isSelected ? 'bg-purple-600 border-purple-500 text-white scale-105 shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-200 hover:border-purple-500/50'
+                    }`}
+                  >
+                    {card.text}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Mini Game: Spelling
+    function SpellingGame({ vocabList, recordGameScore }) {
+      const [currentWord, setCurrentWord] = useState(null);
+      const [inputVal, setInputVal] = useState('');
+      const [status, setStatus] = useState(null);
+
+      const nextWord = () => {
+        const random = vocabList[Math.floor(Math.random() * vocabList.length)];
+        setCurrentWord(random);
+        setInputVal('');
+        setStatus(null);
+      };
+
+      useEffect(() => { nextWord(); }, [vocabList]);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!inputVal.trim() || status !== null) return;
+        const isCorrect = inputVal.trim().toLowerCase() === currentWord.word.toLowerCase();
+        setStatus(isCorrect ? 'correct' : 'wrong');
+        recordGameScore(isCorrect ? 10 : 0, isCorrect);
+      };
+
+      if (!currentWord) return null;
+
+      return (
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl text-center space-y-6">
+          <span className="text-xs font-bold uppercase text-emerald-400 tracking-wider">Nghe & Gõ Từ</span>
+          <div>
+            <button
+              onClick={() => speakWord(currentWord.word)}
+              className="p-4 bg-emerald-600/20 text-emerald-400 rounded-full border border-emerald-500/30 hover:scale-105 transition mb-3"
+            >
+              <IconVolume />
+            </button>
+            <p className="text-sm font-semibold text-slate-300">"{currentWord.meaning}"</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <input 
+              type="text"
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              placeholder="Nhập cụm từ tiếng Anh..."
+              disabled={status !== null}
+              className={`w-full p-4 rounded-2xl border text-center font-bold text-lg bg-slate-950 focus:outline-none transition ${
+                status === 'correct' ? 'border-emerald-500 text-emerald-400' : status === 'wrong' ? 'border-rose-500 text-rose-400' : 'border-slate-800 focus:border-emerald-500'
+              }`}
+            />
+
+            {status === null && (
+              <button type="submit" className="w-full py-3.5 bg-emerald-600 font-bold rounded-2xl">Kiểm Tra</button>
+            )}
+          </form>
+
+          {status !== null && (
+            <div className="space-y-3">
+              <p className={`font-bold ${status === 'correct' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {status === 'correct' ? 'Chính xác!' : `Từ đúng là: ${currentWord.word}`}
+              </p>
+              <button onClick={nextWord} className="w-full py-3.5 bg-slate-800 font-bold rounded-2xl">Từ Tiếp Theo →</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Mini Game: Scramble
+    function ScrambleGame({ vocabList, recordGameScore }) {
+      const [wordItem, setWordItem] = useState(null);
+      const [scrambled, setScrambled] = useState('');
+      const [userAnswer, setUserAnswer] = useState('');
+      const [status, setStatus] = useState(null);
+
+      const initScramble = () => {
+        const item = vocabList[Math.floor(Math.random() * vocabList.length)];
+        let arr = item.word.split('');
+        if (arr.length > 1) {
+          while (arr.join('') === item.word) arr.sort(() => 0.5 - Math.random());
+        }
+        setWordItem(item);
+        setScrambled(arr.join(' '));
+        setUserAnswer('');
+        setStatus(null);
+      };
+
+      useEffect(() => { initScramble(); }, [vocabList]);
+
+      const handleCheck = (e) => {
+        e.preventDefault();
+        if (!userAnswer.trim() || status !== null) return;
+        const isCorrect = userAnswer.trim().toLowerCase() === wordItem.word.toLowerCase();
+        setStatus(isCorrect ? 'correct' : 'wrong');
+        recordGameScore(isCorrect ? 10 : 0, isCorrect);
+      };
+
+      if (!wordItem) return null;
+
+      return (
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl text-center space-y-6">
+          <span className="text-xs font-bold uppercase text-amber-400 tracking-wider">Trộn Chữ</span>
+          <div>
+            <div className="text-2xl font-black tracking-widest text-amber-400 uppercase bg-amber-500/10 py-3 px-6 rounded-2xl border border-amber-500/20 inline-block mb-2">
+              {scrambled}
+            </div>
+            <p className="text-xs text-slate-400">Gợi ý: <span className="font-semibold text-slate-200">{wordItem.meaning}</span></p>
+          </div>
+
+          <form onSubmit={handleCheck} className="space-y-4">
+            <input 
+              type="text"
+              value={userAnswer}
+              onChange={(e) => setUserAnswer(e.target.value)}
+              placeholder="Sắp xếp thành cụm từ đúng..."
+              disabled={status !== null}
+              className="w-full p-4 rounded-2xl border border-slate-800 bg-slate-950 text-center font-bold text-lg focus:border-amber-500 outline-none"
+            />
+            {status === null && (
+              <button type="submit" className="w-full py-3.5 bg-amber-500 text-slate-950 font-black rounded-2xl">Đoán Từ</button>
+            )}
+          </form>
+
+          {status !== null && (
+            <div className="space-y-3">
+              <p className={`font-bold ${status === 'correct' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {status === 'correct' ? 'Chuẩn xác!' : `Từ đúng là: ${wordItem.word}`}
+              </p>
+              <button onClick={initScramble} className="w-full py-3.5 bg-slate-800 font-bold rounded-2xl">Thử Từ Khác →</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    /* ========================================================
+       3. MANAGE VOCABULARY & FOLDERS VIEW
+       ======================================================== */
+    function ManageView({ vocabList, setVocabList, categories, setCategories, selectedCatId }) {
+      const [word, setWord] = useState('');
+      const [meaning, setMeaning] = useState('');
+      const [example, setExample] = useState('');
+      const [type, setType] = useState('collocation');
+      const [targetCat, setTargetCat] = useState(selectedCatId === 'all' ? 'cat-career' : selectedCatId);
+      
+      const [newCatName, setNewCatName] = useState('');
+      const [showNewCatForm, setShowNewCatForm] = useState(false);
+
+      const handleAddSingle = (e) => {
+        e.preventDefault();
+        if (!word.trim() || !meaning.trim()) return;
+        const newItem = {
+          id: Date.now().toString(),
+          catId: targetCat,
+          word: word.trim(),
+          meaning: meaning.trim(),
+          type: type,
+          example: example.trim(),
+          learned: false
+        };
+        setVocabList([newItem, ...vocabList]);
+        setWord(''); setMeaning(''); setExample('');
+      };
+
+      const handleCreateCategory = (e) => {
+        e.preventDefault();
+        if (!newCatName.trim()) return;
+        const newCat = {
+          id: `cat-${Date.now()}`,
+          name: newCatName.trim(),
+          description: 'Thư mục tùy chỉnh'
+        };
+        setCategories([...categories, newCat]);
+        setTargetCat(newCat.id);
+        setNewCatName('');
+        setShowNewCatForm(false);
+      };
+
+      const handleDelete = (id) => {
+        setVocabList(vocabList.filter(i => i.id !== id));
+      };
+
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Add Form & Category Creator */}
+          <div className="md:col-span-1 space-y-4">
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4">
+              <h3 className="font-bold text-sm text-indigo-400">Thêm Từ Vựng / Collocation Mới</h3>
+              
+              <form onSubmit={handleAddSingle} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase">Thư Mục / Chủ Đề *</label>
+                  <select 
+                    value={targetCat} 
+                    onChange={e => setTargetCat(e.target.value)}
+                    className="w-full mt-1 p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm focus:border-indigo-500 outline-none"
+                  >
+                    {categories.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase">Từ / Cụm từ (B2) *</label>
+                  <input 
+                    type="text" required value={word} onChange={e => setWord(e.target.value)}
+                    placeholder="Vd: pursue a career"
+                    className="w-full mt-1 p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm focus:border-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase">Nghĩa tiếng Việt *</label>
+                  <input 
+                    type="text" required value={meaning} onChange={e => setMeaning(e.target.value)}
+                    placeholder="Vd: Theo đuổi sự nghiệp"
+                    className="w-full mt-1 p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm focus:border-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase">Loại cụm từ</label>
+                  <select 
+                    value={type} onChange={e => setType(e.target.value)}
+                    className="w-full mt-1 p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm focus:border-indigo-500 outline-none"
+                  >
+                    <option value="collocation">Collocation</option>
+                    <option value="idiom / phrase">Idiom / Phrase</option>
+                    <option value="verb">Động từ (Verb)</option>
+                    <option value="noun phrase">Cụm danh từ</option>
+                    <option value="grammar">Cấu trúc Ngữ pháp</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase">Ví dụ minh họa câu</label>
+                  <input 
+                    type="text" value={example} onChange={e => setExample(e.target.value)}
+                    placeholder="Vd: She moved to London to pursue a career."
+                    className="w-full mt-1 p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm focus:border-indigo-500 outline-none"
+                  />
+                </div>
+
+                <button type="submit" className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm hover:bg-indigo-500 transition">
+                  + Thêm Vào Thư Mục
+                </button>
+              </form>
+            </div>
+
+            {/* Create New Folder */}
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-3xl">
+              {!showNewCatForm ? (
+                <button 
+                  onClick={() => setShowNewCatForm(true)}
+                  className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+                >
+                  📁 Tạo Thư Mục Từ Vựng Mới
+                </button>
+              ) : (
+                <form onSubmit={handleCreateCategory} className="space-y-3">
+                  <input 
+                    type="text" 
+                    required 
+                    value={newCatName} 
+                    onChange={e => setNewCatName(e.target.value)}
+                    placeholder="Tên thư mục mới (Vd: IELTS Writing)..."
+                    className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs focus:border-indigo-500 outline-none"
+                  />
+                  <div className="flex gap-2">
+                    <button type="submit" className="flex-1 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs">Tạo</button>
+                    <button type="button" onClick={() => setShowNewCatForm(false)} className="py-2 px-3 bg-slate-800 text-slate-400 font-bold rounded-xl text-xs">Hủy</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+
+          {/* List Display */}
+          <div className="md:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-5">
+            <h3 className="font-bold text-sm mb-4">Danh Sách Từ Vựng Hiện Tại ({vocabList.length})</h3>
+            <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+              {vocabList.map(item => {
+                const catObj = categories.find(c => c.id === item.catId);
+                return (
+                  <div key={item.id} className="p-3 bg-slate-950 border border-slate-800/80 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-white text-base">{item.word}</span>
+                        {item.type && (
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-indigo-950 text-indigo-400 border border-indigo-800">
+                            {item.type}
+                          </span>
+                        )}
+                        <button onClick={() => speakWord(item.word)} className="text-slate-400 hover:text-indigo-400">
+                          <IconVolume />
+                        </button>
+                      </div>
+                      <p className="text-xs text-indigo-300 font-semibold">{item.meaning}</p>
+                      {item.example && <p className="text-[11px] text-slate-400 italic">"{item.example}"</p>}
+                      <span className="text-[10px] text-slate-500">📁 {catObj ? catObj.name : 'Khác'}</span>
+                    </div>
+                    <button onClick={() => handleDelete(item.id)} className="p-2 text-slate-500 hover:text-rose-400">
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ========================================================
+       4. STATS VIEW
+       ======================================================== */
+    function StatsView({ vocabList, stats }) {
+      const total = vocabList.length;
+      const learned = vocabList.filter(i => i.learned).length;
+      const percent = total > 0 ? Math.round((learned / total) * 100) : 0;
+
+      return (
+        <div className="max-w-xl mx-auto space-y-6">
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-[10px] text-slate-400 font-bold uppercase">Từ Trong Mục</span>
+              <p className="text-2xl font-black text-white mt-1">{total}</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-[10px] text-slate-400 font-bold uppercase">Đã Thuộc</span>
+              <p className="text-2xl font-black text-emerald-400 mt-1">{learned}</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+              <span className="text-[10px] text-slate-400 font-bold uppercase">Điểm Game</span>
+              <p className="text-2xl font-black text-amber-400 mt-1">{stats.score}</p>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl space-y-4">
+            <div className="flex justify-between text-sm font-bold">
+              <span>Tiến độ học tập danh mục này</span>
+              <span className="text-indigo-400">{percent}%</span>
+            </div>
+            <div className="h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+              <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500" style={{ width: `${percent}%` }} />
+            </div>
+            <p className="text-xs text-slate-400">Bạn đã thành thạo {learned} trên tổng số {total} từ vựng/cụm collocations B2.</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Render App
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
