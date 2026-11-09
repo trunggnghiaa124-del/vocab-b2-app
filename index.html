@@ -259,7 +259,7 @@
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
           const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = 'en-GB'; // Giọng Anh - Anh
+          utterance.lang = 'en-GB';
           utterance.rate = 0.88;
 
           const voices = window.speechSynthesis.getVoices();
@@ -359,6 +359,33 @@
         }, 700);
       };
 
+      // HAM XU LY KIEM TRA CHO GAME GO CHU (CHUNG CHO CA NUT BAM VÀ ENTER)
+      const checkSpellingAnswer = () => {
+        if (selectedOption !== null) return;
+        const isCorrect = spellingInput.trim().toLowerCase() === filteredVocab[currentIndex]?.word.toLowerCase();
+        setSelectedOption({ isCorrect });
+        if (isCorrect) { playSoundEffect('correct'); setScore(score + 15); setStreak(streak + 1); } 
+        else { playSoundEffect('wrong'); setStreak(0); }
+        setTimeout(() => {
+          setSelectedOption(null);
+          setSpellingInput('');
+          if (isCorrect) setCurrentIndex((currentIndex + 1) % filteredVocab.length);
+        }, 800);
+      };
+
+      const checkScrambleAnswer = () => {
+        if (selectedOption !== null) return;
+        const isCorrect = scrambleInput.trim().toLowerCase() === filteredVocab[currentIndex]?.word.toLowerCase();
+        setSelectedOption({ isCorrect });
+        if (isCorrect) { playSoundEffect('correct'); setScore(score + 12); setStreak(streak + 1); } 
+        else { playSoundEffect('wrong'); setStreak(0); }
+        setTimeout(() => {
+          setSelectedOption(null);
+          setScrambleInput('');
+          if (isCorrect) setCurrentIndex((currentIndex + 1) % filteredVocab.length);
+        }, 800);
+      };
+
       return (
         <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 flex flex-col min-h-screen">
           
@@ -454,7 +481,7 @@
               ) : (
                 <div className="w-full flex flex-col items-center">
                   
-                  {/* FLASHCARD MOBILE FRIENDLY */}
+                  {/* FLASHCARD */}
                   <div 
                     onClick={toggleFlipCard}
                     className={`w-full min-h-[380px] sm:min-h-[440px] cursor-pointer relative select-none transition-all duration-200 ${isFadingOut ? 'opacity-0 scale-95 blur-sm' : 'opacity-100 scale-100 blur-0'}`}
@@ -516,7 +543,7 @@
             </div>
           )}
 
-          {/* TAB 2: MINI GAMES RESPONSIVE MOBILE */}
+          {/* TAB 2: MINI GAMES */}
           {activeTab === 'games' && (
             <div className="flex-1 max-w-4xl mx-auto w-full space-y-4 sm:space-y-6">
               <div className="flex items-center justify-between bg-slate-900 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-800">
@@ -553,12 +580,12 @@
                   </div>
                   <div onClick={() => setActiveGame('spelling')} className="bg-slate-900 border border-slate-800 hover:border-indigo-500 p-5 rounded-2xl cursor-pointer transition-all space-y-2">
                     <span className="text-3xl">✍️</span>
-                    <h3 className="text-base font-bold text-white">2. Gõ Chính Tả</h3>
+                    <h3 className="text-base font-bold text-white">2. Gõ Chính Tả (Phím Enter)</h3>
                     <p className="text-xs text-slate-400">Xem nghĩa & nghe phát âm để gõ lại đúng từ vựng.</p>
                   </div>
                   <div onClick={() => setActiveGame('scramble')} className="bg-slate-900 border border-slate-800 hover:border-indigo-500 p-5 rounded-2xl cursor-pointer transition-all space-y-2">
                     <span className="text-3xl">🧩</span>
-                    <h3 className="text-base font-bold text-white">3. Trộn Chữ (Scramble)</h3>
+                    <h3 className="text-base font-bold text-white">3. Trộn Chữ (Phím Enter)</h3>
                     <p className="text-xs text-slate-400">Sắp xếp các ký tự bị xáo trộn về từ gốc ban đầu.</p>
                   </div>
                   <div onClick={() => setActiveGame('tf')} className="bg-slate-900 border border-slate-800 hover:border-indigo-500 p-5 rounded-2xl cursor-pointer transition-all space-y-2">
@@ -611,7 +638,7 @@
                 </div>
               )}
 
-              {/* GAME 2: GÕ CHÍNH TẢ */}
+              {/* GAME 2: GÕ CHÍNH TẢ (TÍCH HỢP PHÍM ENTER) */}
               {activeGame === 'spelling' && filteredVocab.length > 0 && (
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-8 text-center space-y-5">
                   <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-widest">
@@ -620,33 +647,31 @@
                   </div>
                   <h3 className="text-xl sm:text-3xl font-black text-amber-300">{filteredVocab[currentIndex]?.meaning}</h3>
                   <button onClick={() => speak(filteredVocab[currentIndex]?.word)} className="px-4 py-2 bg-indigo-600/20 text-indigo-300 rounded-xl font-bold text-xs">🇬🇧 Nghe giọng UK</button>
+                  
                   <div className="flex justify-center">
                     <input 
                       type="text" 
-                      placeholder="Gõ từ tiếng Anh..." 
+                      placeholder="Gõ từ rồi bấm Enter..." 
                       value={spellingInput} 
                       onChange={(e) => setSpellingInput(e.target.value)} 
-                      className={`w-full max-w-md border rounded-xl px-4 py-3 text-center text-base sm:text-lg font-bold transition-all ${
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          checkSpellingAnswer();
+                        }
+                      }}
+                      className={`w-full max-w-md border rounded-xl px-4 py-3 text-center text-base sm:text-lg font-bold transition-all focus:outline-none focus:border-indigo-500 ${
                         selectedOption?.isCorrect === true ? 'bg-emerald-950 border-emerald-500 text-emerald-300' : 
                         selectedOption?.isCorrect === false ? 'bg-rose-950 border-rose-500 text-rose-300' : 'bg-slate-950 border-slate-800 text-white'
                       }`} 
                     />
                   </div>
-                  <button onClick={() => {
-                    const isCorrect = spellingInput.trim().toLowerCase() === filteredVocab[currentIndex]?.word.toLowerCase();
-                    setSelectedOption({ isCorrect });
-                    if (isCorrect) { playSoundEffect('correct'); setScore(score + 15); setStreak(streak + 1); } 
-                    else { playSoundEffect('wrong'); setStreak(0); }
-                    setTimeout(() => {
-                      setSelectedOption(null);
-                      setSpellingInput('');
-                      if (isCorrect) setCurrentIndex((currentIndex + 1) % filteredVocab.length);
-                    }, 800);
-                  }} className="w-full sm:w-auto px-8 py-3 bg-emerald-600 text-slate-950 font-black rounded-xl hover:bg-emerald-500 text-sm">Kiểm tra kết quả</button>
+                  
+                  <button onClick={checkSpellingAnswer} className="w-full sm:w-auto px-8 py-3 bg-emerald-600 text-slate-950 font-black rounded-xl hover:bg-emerald-500 text-sm">Kiểm tra (Hoặc bấm Enter ↵)</button>
                 </div>
               )}
 
-              {/* GAME 3: TRỘN CHỮ */}
+              {/* GAME 3: TRỘN CHỮ (TÍCH HỢP PHÍM ENTER) */}
               {activeGame === 'scramble' && filteredVocab.length > 0 && (
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-8 text-center space-y-5">
                   <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-widest">
@@ -657,29 +682,27 @@
                   <div className="text-2xl sm:text-4xl font-black tracking-widest text-indigo-400 bg-slate-950 py-3 px-6 rounded-2xl border border-slate-800 inline-block font-mono">
                     {scrambledWord}
                   </div>
+                  
                   <div className="flex justify-center">
                     <input 
                       type="text" 
-                      placeholder="Gõ từ hoàn chỉnh..." 
+                      placeholder="Gõ từ hoàn chỉnh rồi bấm Enter..." 
                       value={scrambleInput} 
                       onChange={(e) => setScrambleInput(e.target.value)} 
-                      className={`w-full max-w-md border rounded-xl px-4 py-3 text-center text-base sm:text-lg font-bold transition-all ${
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          checkScrambleAnswer();
+                        }
+                      }}
+                      className={`w-full max-w-md border rounded-xl px-4 py-3 text-center text-base sm:text-lg font-bold transition-all focus:outline-none focus:border-indigo-500 ${
                         selectedOption?.isCorrect === true ? 'bg-emerald-950 border-emerald-500 text-emerald-300' : 
                         selectedOption?.isCorrect === false ? 'bg-rose-950 border-rose-500 text-rose-300' : 'bg-slate-950 border-slate-800 text-white'
                       }`} 
                     />
                   </div>
-                  <button onClick={() => {
-                    const isCorrect = scrambleInput.trim().toLowerCase() === filteredVocab[currentIndex]?.word.toLowerCase();
-                    setSelectedOption({ isCorrect });
-                    if (isCorrect) { playSoundEffect('correct'); setScore(score + 12); setStreak(streak + 1); } 
-                    else { playSoundEffect('wrong'); setStreak(0); }
-                    setTimeout(() => {
-                      setSelectedOption(null);
-                      setScrambleInput('');
-                      if (isCorrect) setCurrentIndex((currentIndex + 1) % filteredVocab.length);
-                    }, 800);
-                  }} className="w-full sm:w-auto px-8 py-3 bg-emerald-600 text-slate-950 font-black rounded-xl hover:bg-emerald-500 text-sm">Kiểm tra</button>
+                  
+                  <button onClick={checkScrambleAnswer} className="w-full sm:w-auto px-8 py-3 bg-emerald-600 text-slate-950 font-black rounded-xl hover:bg-emerald-500 text-sm">Kiểm tra (Hoặc bấm Enter ↵)</button>
                 </div>
               )}
 
