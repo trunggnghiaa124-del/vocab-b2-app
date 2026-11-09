@@ -65,6 +65,11 @@
       try { firebase.initializeApp(firebaseConfig); } catch (e) {}
     }
 
+    // CẤU HÌNH LƯU PHIÊN ĐĂNG NHẬP VĨNH VIỄN TRÊN BỘ NHỚ TRÌNH DUYỆT
+    if (firebase.auth) {
+      firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+    }
+
     // TẠO ÂM THANH HIỆU ỨNG ĐÚNG / SAI BẰNG WEB AUDIO API
     const playSoundEffect = (type) => {
       try {
@@ -133,7 +138,12 @@
     const initialFolders = ['Tất cả', 'Career', 'Hàng ngày', 'IELTS Academic'];
 
     function App() {
-      const [user, setUser] = useState(null);
+      const [user, setUser] = useState(() => {
+        const localUser = localStorage.getItem('vocab_master_user');
+        return localUser ? JSON.parse(localUser) : null;
+      });
+      const [authLoading, setAuthLoading] = useState(true);
+
       const [vocabList, setVocabList] = useState(() => {
         const saved = localStorage.getItem('vocab_master_b2_list');
         return saved ? JSON.parse(saved) : initialVocabList;
@@ -171,13 +181,30 @@
       const [matchSelected, setMatchSelected] = useState(null);
       const [matchedIds, setMatchedIds] = useState([]);
 
+      // GIỮ TRẠNG THÁI ĐĂNG NHẬP KHI RELOAD
       useEffect(() => {
         if (firebase.auth) {
-          firebase.auth().onAuthStateChanged((currentUser) => setUser(currentUser));
+          const unsubscribe = firebase.auth().onAuthStateChanged((currentUser) => {
+            if (currentUser) {
+              const userData = {
+                displayName: currentUser.displayName || 'Trung Nghĩa',
+                email: currentUser.email
+              };
+              setUser(userData);
+              localStorage.setItem('vocab_master_user', JSON.stringify(userData));
+            } else {
+              // Chỉ xóa nếu chưa từng lưu user mock
+              const savedUser = localStorage.getItem('vocab_master_user');
+              if (!savedUser) setUser(null);
+            }
+            setAuthLoading(false);
+          });
+          return () => unsubscribe();
+        } else {
+          setAuthLoading(false);
         }
       }, []);
 
-      // LẬT THẺ ÊM MẮT VỚI PHÍM SPACE
       const toggleFlipCard = () => {
         setIsFadingOut(true);
         setTimeout(() => {
@@ -203,14 +230,26 @@
       const handleGoogleLogin = () => {
         if (!firebase.auth) return;
         const provider = new firebase.auth.GoogleAuthProvider();
-        firebase.auth().signInWithPopup(provider).catch(() => {
-          setUser({ displayName: 'Trung Nghĩa', email: 'user@example.com' });
-        });
+        firebase.auth().signInWithPopup(provider)
+          .then((result) => {
+            const userData = {
+              displayName: result.user.displayName || 'Trung Nghĩa',
+              email: result.user.email
+            };
+            setUser(userData);
+            localStorage.setItem('vocab_master_user', JSON.stringify(userData));
+          })
+          .catch(() => {
+            const fallbackUser = { displayName: 'Trung Nghĩa', email: 'user@example.com' };
+            setUser(fallbackUser);
+            localStorage.setItem('vocab_master_user', JSON.stringify(fallbackUser));
+          });
       };
 
       const handleLogout = () => {
         if (firebase.auth) firebase.auth().signOut();
         setUser(null);
+        localStorage.removeItem('vocab_master_user');
       };
 
       useEffect(() => { localStorage.setItem('vocab_master_b2_list', JSON.stringify(vocabList)); }, [vocabList]);
@@ -254,7 +293,6 @@
         return selectedOptions.sort(() => Math.random() - 0.5);
       }, [currentIndex, filteredVocab, activeGame]);
 
-      // HÀM PHÁT ÂM ANH - ANH (UK ENGLISH)
       const speak = (text) => {
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
@@ -264,9 +302,7 @@
 
           const voices = window.speechSynthesis.getVoices();
           const ukVoice = voices.find(v => v.lang.includes('en-GB') || v.name.includes('UK') || v.name.includes('British'));
-          if (ukVoice) {
-            utterance.voice = ukVoice;
-          }
+          if (ukVoice) utterance.voice = ukVoice;
 
           window.speechSynthesis.speak(utterance);
         }
@@ -359,7 +395,6 @@
         }, 700);
       };
 
-      // HAM XU LY KIEM TRA CHO GAME GO CHU (CHUNG CHO CA NUT BAM VÀ ENTER)
       const checkSpellingAnswer = () => {
         if (selectedOption !== null) return;
         const isCorrect = spellingInput.trim().toLowerCase() === filteredVocab[currentIndex]?.word.toLowerCase();
@@ -407,9 +442,11 @@
               </div>
             </div>
 
-            {/* GOOGLE AUTH */}
+            {/* GOOGLE AUTH WITH PERSISTENCE */}
             <div className="w-full sm:w-auto flex justify-end">
-              {user ? (
+              {authLoading ? (
+                <div className="px-4 py-2 bg-slate-900 text-slate-400 rounded-xl text-xs font-semibold animate-pulse">Đang kiểm tra đăng nhập...</div>
+              ) : user ? (
                 <div className="flex items-center gap-2 sm:gap-3 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
                   <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">
                     {user.displayName ? user.displayName.charAt(0) : 'U'}
@@ -495,7 +532,7 @@
                       {!isFlipped ? (
                         <div className="my-auto flex flex-col items-center py-4">
                           <h2 className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-indigo-200 mb-4">{filteredVocab[currentIndex]?.word}</h2>
-                          <button onClick={(e) => { e.stopPropagation(); speak(filteredVocab[currentIndex]?.word); }} className="px-5 py-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 font-bold hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2 text-sm sm:text-base">🔊</button>
+                          <button onClick={(e) => { e.stopPropagation(); speak(filteredVocab[currentIndex]?.word); }} className="px-5 py-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 font-bold hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2 text-sm sm:text-base">🇬🇧 Phát âm UK</button>
                         </div>
                       ) : (
                         <div className="my-auto flex flex-col items-center py-4">
@@ -638,7 +675,7 @@
                 </div>
               )}
 
-              {/* GAME 2: GÕ CHÍNH TẢ (TÍCH HỢP PHÍM ENTER) */}
+              {/* GAME 2: GÕ CHÍNH TẢ */}
               {activeGame === 'spelling' && filteredVocab.length > 0 && (
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-8 text-center space-y-5">
                   <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-widest">
@@ -671,7 +708,7 @@
                 </div>
               )}
 
-              {/* GAME 3: TRỘN CHỮ (TÍCH HỢP PHÍM ENTER) */}
+              {/* GAME 3: TRỘN CHỮ */}
               {activeGame === 'scramble' && filteredVocab.length > 0 && (
                 <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-8 text-center space-y-5">
                   <div className="flex items-center justify-between text-xs font-bold text-indigo-400 uppercase tracking-widest">
@@ -759,7 +796,7 @@
                     <span>{currentIndex + 1}/{filteredVocab.length}</span>
                   </div>
                   <div>
-                    <button onClick={() => speak(filteredVocab[currentIndex]?.word)} className="px-6 sm:px-8 py-4 sm:py-5 rounded-2xl bg-indigo-600 text-white font-black text-base sm:text-lg shadow-lg shadow-indigo-600/30 hover:scale-105 transition-all">🔊</button>
+                    <button onClick={() => speak(filteredVocab[currentIndex]?.word)} className="px-6 sm:px-8 py-4 sm:py-5 rounded-2xl bg-indigo-600 text-white font-black text-base sm:text-lg shadow-lg shadow-indigo-600/30 hover:scale-105 transition-all">🇬🇧 Nghe Giọng UK</button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                     {currentDynamicOptions.map((item, idx) => {
