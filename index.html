@@ -65,12 +65,10 @@
       try { firebase.initializeApp(firebaseConfig); } catch (e) {}
     }
 
-    // CẤU HÌNH LƯU PHIÊN ĐĂNG NHẬP VĨNH VIỄN TRÊN BỘ NHỚ TRÌNH DUYỆT
     if (firebase.auth) {
       firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
     }
 
-    // TẠO ÂM THANH HIỆU ỨNG ĐÚNG / SAI BẰNG WEB AUDIO API
     const playSoundEffect = (type) => {
       try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -120,7 +118,7 @@
       } catch (e) {}
     };
 
-    const initialVocabList = [
+    const defaultVocabList = [
       { id: '1', word: 'pursue a career', meaning: 'theo đuổi sự nghiệp', example: 'She decided to pursue a career in international relations.', status: 'new', folder: 'Career' },
       { id: '2', word: 'climb the corporate ladder', meaning: 'thăng tiến trong công việc', example: 'He worked round the clock to climb the corporate ladder.', status: 'new', folder: 'Career' },
       { id: '3', word: 'work-life balance', meaning: 'cân bằng công việc & cuộc sống', example: 'Achieving a healthy work-life balance reduces burnouts.', status: 'new', folder: 'Career' },
@@ -135,7 +133,7 @@
       { id: '12', word: 'play a vital role', meaning: 'đóng vai trò quan trọng', example: 'Education plays a vital role in nation building.', status: 'new', folder: 'IELTS Academic' }
     ];
 
-    const initialFolders = ['Tất cả', 'Career', 'Hàng ngày', 'IELTS Academic'];
+    const defaultFolders = ['Tất cả', 'Career', 'Hàng ngày', 'IELTS Academic'];
 
     function App() {
       const [user, setUser] = useState(() => {
@@ -144,16 +142,28 @@
       });
       const [authLoading, setAuthLoading] = useState(true);
 
+      // ƯU TIÊN KHÔI PHỤC TỪ VỰNG & CHỦ ĐỀ TỪ LOCALSTORAGE
       const [vocabList, setVocabList] = useState(() => {
-        const saved = localStorage.getItem('vocab_master_b2_list');
-        return saved ? JSON.parse(saved) : initialVocabList;
-      });
-      const [folders, setFolders] = useState(() => {
-        const saved = localStorage.getItem('vocab_master_b2_folders');
-        return saved ? JSON.parse(saved) : initialFolders;
+        const saved1 = localStorage.getItem('vocab_master_b2_list');
+        const saved2 = localStorage.getItem('vocab_master_list');
+        if (saved1) return JSON.parse(saved1);
+        if (saved2) return JSON.parse(saved2);
+        return defaultVocabList;
       });
 
-      const [selectedFolder, setSelectedFolder] = useState('Career');
+      const [folders, setFolders] = useState(() => {
+        const saved1 = localStorage.getItem('vocab_master_b2_folders');
+        const saved2 = localStorage.getItem('vocab_master_folders');
+        if (saved1) return JSON.parse(saved1);
+        if (saved2) return JSON.parse(saved2);
+        
+        // Tự động gom nhóm các folder có trong vocabList
+        const existingFolders = Array.from(new Set(vocabList.map(item => item.folder).filter(Boolean)));
+        const combined = Array.from(new Set([...defaultFolders, ...existingFolders]));
+        return combined;
+      });
+
+      const [selectedFolder, setSelectedFolder] = useState('Tất cả');
       const [activeTab, setActiveTab] = useState('flashcard');
       const [currentIndex, setCurrentIndex] = useState(0);
       const [isFlipped, setIsFlipped] = useState(false);
@@ -181,7 +191,6 @@
       const [matchSelected, setMatchSelected] = useState(null);
       const [matchedIds, setMatchedIds] = useState([]);
 
-      // GIỮ TRẠNG THÁI ĐĂNG NHẬP KHI RELOAD
       useEffect(() => {
         if (firebase.auth) {
           const unsubscribe = firebase.auth().onAuthStateChanged((currentUser) => {
@@ -193,7 +202,6 @@
               setUser(userData);
               localStorage.setItem('vocab_master_user', JSON.stringify(userData));
             } else {
-              // Chỉ xóa nếu chưa từng lưu user mock
               const savedUser = localStorage.getItem('vocab_master_user');
               if (!savedUser) setUser(null);
             }
@@ -252,8 +260,16 @@
         localStorage.removeItem('vocab_master_user');
       };
 
-      useEffect(() => { localStorage.setItem('vocab_master_b2_list', JSON.stringify(vocabList)); }, [vocabList]);
-      useEffect(() => { localStorage.setItem('vocab_master_b2_folders', JSON.stringify(folders)); }, [folders]);
+      // ĐỒNG BỘ ĐỒNG THỜI CẢ 2 KEY LƯU TRỮ ĐỂ TRÁNH LỖI XÓA DỮ LIỆU
+      useEffect(() => { 
+        localStorage.setItem('vocab_master_b2_list', JSON.stringify(vocabList));
+        localStorage.setItem('vocab_master_list', JSON.stringify(vocabList)); 
+      }, [vocabList]);
+
+      useEffect(() => { 
+        localStorage.setItem('vocab_master_b2_folders', JSON.stringify(folders));
+        localStorage.setItem('vocab_master_folders', JSON.stringify(folders));
+      }, [folders]);
 
       const filteredVocab = useMemo(() => {
         return vocabList.filter(item => {
@@ -325,6 +341,12 @@
         e.preventDefault();
         if (!newWord.trim() || !newMeaning.trim()) return;
         const newItem = { id: Date.now().toString(), word: newWord.trim(), meaning: newMeaning.trim(), example: newExample.trim(), status: 'new', folder: targetFolderForAdd };
+        
+        // Tự thêm folder nếu chưa có
+        if (!folders.includes(targetFolderForAdd)) {
+          setFolders([...folders, targetFolderForAdd]);
+        }
+
         setVocabList([newItem, ...vocabList]);
         setNewWord(''); setNewMeaning(''); setNewExample('');
       };
@@ -474,7 +496,7 @@
             <div className="bg-slate-900/90 backdrop-blur-md p-1 rounded-xl sm:rounded-2xl border border-slate-800 flex gap-1 shadow-inner max-w-full overflow-x-auto">
               <button onClick={() => setActiveTab('flashcard')} className={`px-3 sm:px-5 py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${activeTab === 'flashcard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white'}`}>🎴 Flashcard</button>
               <button onClick={() => setActiveTab('games')} className={`px-3 sm:px-5 py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${activeTab === 'games' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white'}`}>🎮 6 Games</button>
-              <button onClick={() => setActiveTab('add')} className={`px-3 sm:px-5 py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${activeTab === 'add' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white'}`}>⚙️ Quản Lý ({filteredVocab.length})</button>
+              <button onClick={() => setActiveTab('add')} className={`px-3 sm:px-5 py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${activeTab === 'add' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white'}`}>⚙️ Quản Lý ({vocabList.length})</button>
               <button onClick={() => setActiveTab('stats')} className={`px-3 sm:px-5 py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all ${activeTab === 'stats' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white'}`}>📊 Thống Kê</button>
             </div>
           </nav>
@@ -532,7 +554,7 @@
                       {!isFlipped ? (
                         <div className="my-auto flex flex-col items-center py-4">
                           <h2 className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-indigo-200 mb-4">{filteredVocab[currentIndex]?.word}</h2>
-                          <button onClick={(e) => { e.stopPropagation(); speak(filteredVocab[currentIndex]?.word); }} className="px-5 py-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 font-bold hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2 text-sm sm:text-base">Phát âm 🔊</button>
+                          <button onClick={(e) => { e.stopPropagation(); speak(filteredVocab[currentIndex]?.word); }} className="px-5 py-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 font-bold hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2 text-sm sm:text-base">🇬🇧 Phát âm UK</button>
                         </div>
                       ) : (
                         <div className="my-auto flex flex-col items-center py-4">
