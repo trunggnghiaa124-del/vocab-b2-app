@@ -65,8 +65,11 @@
       try { firebase.initializeApp(firebaseConfig); } catch (e) {}
     }
 
-    if (firebase.auth) {
-      firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+    const auth = firebase.auth ? firebase.auth() : null;
+    const db = firebase.firestore ? firebase.firestore() : null;
+
+    if (auth) {
+      auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
     }
 
     const playSoundEffect = (type) => {
@@ -136,31 +139,18 @@
     const defaultFolders = ['Tất cả', 'Career', 'Hàng ngày', 'IELTS Academic'];
 
     function App() {
-      const [user, setUser] = useState(() => {
-        const localUser = localStorage.getItem('vocab_master_user');
-        return localUser ? JSON.parse(localUser) : null;
-      });
+      const [user, setUser] = useState(null);
       const [authLoading, setAuthLoading] = useState(true);
+      const [syncStatus, setSyncStatus] = useState('local'); // 'local' | 'syncing' | 'synced'
 
-      // ƯU TIÊN KHÔI PHỤC TỪ VỰNG & CHỦ ĐỀ TỪ LOCALSTORAGE
       const [vocabList, setVocabList] = useState(() => {
-        const saved1 = localStorage.getItem('vocab_master_b2_list');
-        const saved2 = localStorage.getItem('vocab_master_list');
-        if (saved1) return JSON.parse(saved1);
-        if (saved2) return JSON.parse(saved2);
-        return defaultVocabList;
+        const saved = localStorage.getItem('vocab_master_b2_list');
+        return saved ? JSON.parse(saved) : defaultVocabList;
       });
 
       const [folders, setFolders] = useState(() => {
-        const saved1 = localStorage.getItem('vocab_master_b2_folders');
-        const saved2 = localStorage.getItem('vocab_master_folders');
-        if (saved1) return JSON.parse(saved1);
-        if (saved2) return JSON.parse(saved2);
-        
-        // Tự động gom nhóm các folder có trong vocabList
-        const existingFolders = Array.from(new Set(vocabList.map(item => item.folder).filter(Boolean)));
-        const combined = Array.from(new Set([...defaultFolders, ...existingFolders]));
-        return combined;
+        const saved = localStorage.getItem('vocab_master_b2_folders');
+        return saved ? JSON.parse(saved) : defaultFolders;
       });
 
       const [selectedFolder, setSelectedFolder] = useState('Tất cả');
@@ -191,27 +181,94 @@
       const [matchSelected, setMatchSelected] = useState(null);
       const [matchedIds, setMatchedIds] = useState([]);
 
+      // 1. THEO DÕI TRẠNG THÁI ĐĂNG NHẬP & TỰ ĐỘNG LẤY DỮ LIỆU TỪ CLOUD
       useEffect(() => {
-        if (firebase.auth) {
-          const unsubscribe = firebase.auth().onAuthStateChanged((currentUser) => {
-            if (currentUser) {
-              const userData = {
-                displayName: currentUser.displayName || 'Trung Nghĩa',
-                email: currentUser.email
-              };
-              setUser(userData);
-              localStorage.setItem('vocab_master_user', JSON.stringify(userData));
-            } else {
-              const savedUser = localStorage.getItem('vocab_master_user');
-              if (!savedUser) setUser(null);
-            }
-            setAuthLoading(false);
-          });
-          return () => unsubscribe();
-        } else {
+        if (!auth) {
           setAuthLoading(false);
+          return;
         }
+
+        const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+          if (currentUser) {
+            setUser(currentUser);
+            loadUserDataFromCloud(currentUser.uid);
+          } else {
+            setUser(null);
+            setSyncStatus('local');
+          }
+          setAuthLoading(false);
+        });
+
+        return () => unsubscribe();
       }, []);
+
+      // LẤY DỮ LIỆU TỪ FIRESTORE
+      const loadUserDataFromCloud = async (uid) => {
+        if (!db) return;
+        setSyncStatus('syncing');
+        try {
+          const docRef = db.collection('users').doc(uid);
+          const docSnap = await docRef.get();
+
+          if (docSnap.exists) {
+            const data = docSnap.data();
+            if (data.vocabList) {
+              setVocabList(data.vocabList);
+              localStorage.setItem('vocab_master_b2_list', JSON.stringify(data.vocabList));
+            }
+            if (data.folders) {
+              setFolders(data.folders);
+              localStorage.setItem('vocab_master_b2_folders', JSON.stringify(data.folders));
+            }
+          } else {
+            // Nếu là tài khoản mới, đẩy dữ liệu hiện tại lên đám mây lần đầu
+            await docRef.set({
+              vocabList: vocabList,
+              folders: folders,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          }
+          setSyncStatus('synced');
+        } catch (error) {
+          console.error("Lỗi đồng bộ Cloud:", error);
+          setSyncStatus('local');
+        }
+      };
+
+      // ĐỒNG BỘ DỮ LIỆU LÊN FIRESTORE KHI CÓ THAY ĐỔI
+      const saveUserDataToCloud = async (newList, newFolders) => {
+        localStorage.setItem('vocab_master_b2_list', JSON.stringify(newList));
+        localStorage.setItem('vocab_master_b2_folders', JSON.stringify(newFolders));
+
+        if (user && db) {
+          setSyncStatus('syncing');
+          try {
+            await db.collection('users').doc(user.uid).set({
+              vocabList: newList,
+              folders: newFolders,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            setSyncStatus('synced');
+          } catch (error) {
+            console.error("Lỗi lưu Cloud:", error);
+            setSyncStatus('local');
+          }
+        }
+      };
+
+      const handleGoogleLogin = () => {
+        if (!auth) return;
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider).catch((error) => {
+          console.error("Lỗi đăng nhập:", error);
+        });
+      };
+
+      const handleLogout = () => {
+        if (auth) auth.signOut();
+        setUser(null);
+        setSyncStatus('local');
+      };
 
       const toggleFlipCard = () => {
         setIsFadingOut(true);
@@ -234,42 +291,6 @@
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
       }, [activeTab]);
-
-      const handleGoogleLogin = () => {
-        if (!firebase.auth) return;
-        const provider = new firebase.auth.GoogleAuthProvider();
-        firebase.auth().signInWithPopup(provider)
-          .then((result) => {
-            const userData = {
-              displayName: result.user.displayName || 'Trung Nghĩa',
-              email: result.user.email
-            };
-            setUser(userData);
-            localStorage.setItem('vocab_master_user', JSON.stringify(userData));
-          })
-          .catch(() => {
-            const fallbackUser = { displayName: 'Trung Nghĩa', email: 'user@example.com' };
-            setUser(fallbackUser);
-            localStorage.setItem('vocab_master_user', JSON.stringify(fallbackUser));
-          });
-      };
-
-      const handleLogout = () => {
-        if (firebase.auth) firebase.auth().signOut();
-        setUser(null);
-        localStorage.removeItem('vocab_master_user');
-      };
-
-      // ĐỒNG BỘ ĐỒNG THỜI CẢ 2 KEY LƯU TRỮ ĐỂ TRÁNH LỖI XÓA DỮ LIỆU
-      useEffect(() => { 
-        localStorage.setItem('vocab_master_b2_list', JSON.stringify(vocabList));
-        localStorage.setItem('vocab_master_list', JSON.stringify(vocabList)); 
-      }, [vocabList]);
-
-      useEffect(() => { 
-        localStorage.setItem('vocab_master_b2_folders', JSON.stringify(folders));
-        localStorage.setItem('vocab_master_folders', JSON.stringify(folders));
-      }, [folders]);
 
       const filteredVocab = useMemo(() => {
         return vocabList.filter(item => {
@@ -327,7 +348,9 @@
       const markStatusAndNext = (status) => {
         if (filteredVocab.length === 0) return;
         const currentItem = filteredVocab[currentIndex];
-        setVocabList(prev => prev.map(item => item.id === currentItem.id ? { ...item, status } : item));
+        const updatedList = vocabList.map(item => item.id === currentItem.id ? { ...item, status } : item);
+        setVocabList(updatedList);
+        saveUserDataToCloud(updatedList, folders);
 
         setIsFadingOut(true);
         setTimeout(() => {
@@ -342,12 +365,16 @@
         if (!newWord.trim() || !newMeaning.trim()) return;
         const newItem = { id: Date.now().toString(), word: newWord.trim(), meaning: newMeaning.trim(), example: newExample.trim(), status: 'new', folder: targetFolderForAdd };
         
-        // Tự thêm folder nếu chưa có
+        let updatedFolders = folders;
         if (!folders.includes(targetFolderForAdd)) {
-          setFolders([...folders, targetFolderForAdd]);
+          updatedFolders = [...folders, targetFolderForAdd];
+          setFolders(updatedFolders);
         }
 
-        setVocabList([newItem, ...vocabList]);
+        const updatedList = [newItem, ...vocabList];
+        setVocabList(updatedList);
+        saveUserDataToCloud(updatedList, updatedFolders);
+
         setNewWord(''); setNewMeaning(''); setNewExample('');
       };
 
@@ -362,7 +389,9 @@
           }
         });
         if (newItems.length > 0) {
-          setVocabList([...newItems, ...vocabList]);
+          const updatedList = [...newItems, ...vocabList];
+          setVocabList(updatedList);
+          saveUserDataToCloud(updatedList, folders);
           setBulkText('');
         }
       };
@@ -371,9 +400,11 @@
         if (!newFolderInput.trim()) return;
         const folderName = newFolderInput.trim();
         if (!folders.includes(folderName)) {
-          setFolders([...folders, folderName]);
+          const updatedFolders = [...folders, folderName];
+          setFolders(updatedFolders);
           setSelectedFolder(folderName);
           setTargetFolderForAdd(folderName);
+          saveUserDataToCloud(vocabList, updatedFolders);
         }
         setNewFolderInput('');
       };
@@ -382,10 +413,19 @@
         e.stopPropagation();
         if (folderName === 'Tất cả' || folderName === 'Career') return;
         if (confirm(`Bạn có chắc muốn xóa thư mục "${folderName}"?`)) {
-          setFolders(folders.filter(f => f !== folderName));
-          setVocabList(vocabList.filter(i => i.folder !== folderName));
+          const updatedFolders = folders.filter(f => f !== folderName);
+          const updatedList = vocabList.filter(i => i.folder !== folderName);
+          setFolders(updatedFolders);
+          setVocabList(updatedList);
           if (selectedFolder === folderName) setSelectedFolder('Tất cả');
+          saveUserDataToCloud(updatedList, updatedFolders);
         }
+      };
+
+      const handleDeleteWord = (id) => {
+        const updatedList = vocabList.filter(i => i.id !== id);
+        setVocabList(updatedList);
+        saveUserDataToCloud(updatedList, folders);
       };
 
       const scrambledWord = useMemo(() => {
@@ -464,18 +504,22 @@
               </div>
             </div>
 
-            {/* GOOGLE AUTH WITH PERSISTENCE */}
+            {/* TRẠNG THÁI TÀI KHOẢN & ĐỒNG BỘ CLOUD */}
             <div className="w-full sm:w-auto flex justify-end">
               {authLoading ? (
-                <div className="px-4 py-2 bg-slate-900 text-slate-400 rounded-xl text-xs font-semibold animate-pulse">Đang kiểm tra đăng nhập...</div>
+                <div className="px-4 py-2 bg-slate-900 text-slate-400 rounded-xl text-xs font-semibold animate-pulse">Đang kết nối...</div>
               ) : user ? (
                 <div className="flex items-center gap-2 sm:gap-3 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
                   <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">
-                    {user.displayName ? user.displayName.charAt(0) : 'U'}
+                    {user.displayName ? user.displayName.charAt(0) : user.email.charAt(0).toUpperCase()}
                   </div>
                   <div className="text-left">
-                    <div className="text-xs font-bold text-white">{user.displayName || 'Tài khoản'}</div>
-                    <div className="text-[9px] text-emerald-400">Đã kết nối 🟢</div>
+                    <div className="text-xs font-bold text-white max-w-[120px] truncate">{user.displayName || user.email}</div>
+                    <div className="text-[9px] flex items-center gap-1">
+                      {syncStatus === 'syncing' && <span className="text-amber-400 animate-pulse">🔄 Đang đồng bộ...</span>}
+                      {syncStatus === 'synced' && <span className="text-emerald-400">☁️ Đã lưu Đám Mây</span>}
+                      {syncStatus === 'local' && <span className="text-slate-400">💾 Lưu Máy</span>}
+                    </div>
                   </div>
                   <button onClick={handleLogout} className="text-xs text-slate-500 hover:text-rose-400 ml-1 font-semibold">Thoát</button>
                 </div>
@@ -485,7 +529,7 @@
                   className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-indigo-500 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/><path fill="#FBBC05" d="M5.6 14.8c-.3-.8-.4-1.8-.4-2.8s.1-2 .4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16c1.8 3.7 5.6 7 10.1 7z"/></svg>
-                  Đăng nhập Gmail
+                  Đăng nhập Gmail đồng bộ
                 </button>
               )}
             </div>
@@ -1015,7 +1059,7 @@
                           <p className="text-xs font-medium text-amber-300 mt-0.5">{item.meaning}</p>
                           {item.example && <p className="text-[11px] italic text-slate-500 mt-0.5">"{item.example}"</p>}
                         </div>
-                        <button onClick={() => setVocabList(vocabList.filter(i => i.id !== item.id))} className="text-xs text-rose-400 hover:text-rose-300 p-1">🗑️</button>
+                        <button onClick={() => handleDeleteWord(item.id)} className="text-xs text-rose-400 hover:text-rose-300 p-1">🗑️</button>
                       </div>
                     ))
                   )}
