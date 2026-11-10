@@ -141,7 +141,7 @@
     function App() {
       const [user, setUser] = useState(null);
       const [authLoading, setAuthLoading] = useState(true);
-      const [syncStatus, setSyncStatus] = useState('local'); // 'local' | 'syncing' | 'synced'
+      const [syncStatus, setSyncStatus] = useState('local');
 
       const [vocabList, setVocabList] = useState(() => {
         const saved = localStorage.getItem('vocab_master_b2_list');
@@ -181,7 +181,6 @@
       const [matchSelected, setMatchSelected] = useState(null);
       const [matchedIds, setMatchedIds] = useState([]);
 
-      // 1. THEO DÕI TRẠNG THÁI ĐĂNG NHẬP & TỰ ĐỘNG LẤY DỮ LIỆU TỪ CLOUD
       useEffect(() => {
         if (!auth) {
           setAuthLoading(false);
@@ -202,7 +201,6 @@
         return () => unsubscribe();
       }, []);
 
-      // LẤY DỮ LIỆU TỪ FIRESTORE
       const loadUserDataFromCloud = async (uid) => {
         if (!db) return;
         setSyncStatus('syncing');
@@ -214,14 +212,13 @@
             const data = docSnap.data();
             if (data.vocabList) {
               setVocabList(data.vocabList);
-              localStorage.setItem('vocab_master_b2_list', JSON.stringify(data.vocabList));
+              localStorage.getItem('vocab_master_b2_list', JSON.stringify(data.vocabList));
             }
             if (data.folders) {
               setFolders(data.folders);
               localStorage.setItem('vocab_master_b2_folders', JSON.stringify(data.folders));
             }
           } else {
-            // Nếu là tài khoản mới, đẩy dữ liệu hiện tại lên đám mây lần đầu
             await docRef.set({
               vocabList: vocabList,
               folders: folders,
@@ -235,7 +232,6 @@
         }
       };
 
-      // ĐỒNG BỘ DỮ LIỆU LÊN FIRESTORE KHI CÓ THAY ĐỔI
       const saveUserDataToCloud = async (newList, newFolders) => {
         localStorage.setItem('vocab_master_b2_list', JSON.stringify(newList));
         localStorage.setItem('vocab_master_b2_folders', JSON.stringify(newFolders));
@@ -278,20 +274,6 @@
         }, 150);
       };
 
-      useEffect(() => {
-        const handleKeyDown = (e) => {
-          if (e.code === 'Space' && activeTab === 'flashcard') {
-            const tag = e.target.tagName.toLowerCase();
-            if (tag !== 'input' && tag !== 'textarea') {
-              e.preventDefault();
-              toggleFlipCard();
-            }
-          }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-      }, [activeTab]);
-
       const filteredVocab = useMemo(() => {
         return vocabList.filter(item => {
           const matchFolder = selectedFolder === 'Tất cả' || item.folder === selectedFolder;
@@ -299,6 +281,32 @@
           return matchFolder && matchSearch;
         });
       }, [vocabList, selectedFolder, searchTerm]);
+
+      // LẮP ĐẶT ĐIỀU KHIỂN BÀN PHÍM (SPACE & MŨI TÊN TRÁI/PHẢI)
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          if (activeTab !== 'flashcard') return;
+
+          const tag = e.target.tagName.toLowerCase();
+          if (tag === 'input' || tag === 'textarea') return;
+
+          if (e.code === 'Space') {
+            e.preventDefault();
+            toggleFlipCard();
+          } else if (e.code === 'ArrowRight') {
+            e.preventDefault();
+            setIsFlipped(false);
+            setCurrentIndex(prev => (filteredVocab.length ? (prev < filteredVocab.length - 1 ? prev + 1 : 0) : 0));
+          } else if (e.code === 'ArrowLeft') {
+            e.preventDefault();
+            setIsFlipped(false);
+            setCurrentIndex(prev => (filteredVocab.length ? (prev > 0 ? prev - 1 : filteredVocab.length - 1) : 0));
+          }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+      }, [activeTab, filteredVocab.length]);
 
       useEffect(() => { 
         setCurrentIndex(0); 
@@ -593,6 +601,7 @@
                       
                       <div className="w-full flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-bold tracking-wider uppercase">
                         <span>{isFlipped ? 'MẶT SAU: NGHĨA & VÍ DỤ' : 'MẶT TRƯỚC: TỪ VỰNG'}</span>
+                        <span className="hidden sm:inline-block text-[10px] text-indigo-400 bg-indigo-950/80 px-2 py-0.5 rounded-md border border-indigo-500/30">⌨️ Phím ⬅️ ➡️ để chuyển • Space để lật</span>
                       </div>
 
                       {!isFlipped ? (
@@ -623,6 +632,7 @@
                         setCurrentIndex(prev => (prev > 0 ? prev - 1 : filteredVocab.length - 1));
                       }}
                       className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500 text-white font-bold hover:bg-indigo-950/40 transition-all text-lg sm:text-xl"
+                      title="Hoặc bấm phím mũi tên Trái ⬅️"
                     >
                       ⬅️
                     </button>
@@ -636,6 +646,7 @@
                         setCurrentIndex(prev => (prev < filteredVocab.length - 1 ? prev + 1 : 0));
                       }}
                       className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500 text-white font-bold hover:bg-indigo-950/40 transition-all text-lg sm:text-xl"
+                      title="Hoặc bấm phím mũi tên Phải ➡️"
                     >
                       ➡️
                     </button>
